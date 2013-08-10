@@ -19,31 +19,11 @@ import (
 	"time"
 )
 
-// RTTDB is a list of *ClientGroup which stores all RTT-related information
-var RTTDB = make([]*ClientGroup, 0)
-
 // ClientGroup contains an aggregation of RTT information by /v4PrefixSize or
 // /v6PrefixSize
 type ClientGroup struct {
 	Prefix   net.IP
 	SiteRTTs SiteRTTs
-}
-
-// getCGFromData gets a *ClientGroup from RTTDB where an input *net.IPNet equals
-// the *ClientGroup.Prefix.
-// When no entry exists, a new entry is made and returned.
-func getCGFromData(ipnet *net.IPNet) *ClientGroup {
-	for _, v := range RTTDB {
-		if v.Prefix.Equal(ipnet.IP) {
-			return v
-		}
-	}
-	nCG := &ClientGroup{
-		Prefix:   ipnet.IP,
-		SiteRTTs: make([]*SiteRTT, 0),
-	}
-	RTTDB = append(RTTDB, nCG)
-	return nCG
 }
 
 // SiteRTT contains information of a ClientGroup's aggregated RTT to a Site.
@@ -73,24 +53,8 @@ func (l SiteRTTs) Len() int {
 	return len(l)
 }
 
-// getSiteRTTFromCG gets a *SiteRTT from an input *ClientGroup where an input
-// *Site matches an entry in the list of *SiteRTT
-// When no entry exists, a new entry is made and returned.
-func getSiteRTTFromCG(cgo *ClientGroup, site *Site) *SiteRTT {
-	for _, v := range cgo.SiteRTTs {
-		if SitesDB[v.SiteID] == site {
-			return v
-		}
-	}
-	nSiteRTT := &SiteRTT{
-		SiteID: site.ID,
-	}
-	cgo.SiteRTTs = append(cgo.SiteRTTs, nSiteRTT)
-	return nSiteRTT
-}
-
-// SitesDB stores a list of sites
-var SitesDB = make(map[string]*Site, 0)
+// SitesDB stores a map of site IDs to *Sites.
+var SitesDB = make(map[string]*Site)
 
 // A Site contains a set of Slivers
 type Site struct {
@@ -98,21 +62,11 @@ type Site struct {
 	Slivers []*Sliver
 }
 
+// SliversDB stores a map of sliver IPs to *Sites.
+var SliversDB = make(map[string]*Site)
+
 // Sliver represents a server which runs within a parent Site
 type Sliver struct {
 	IP   net.IP
 	Site *Site
-}
-
-// getSiteWithIP gets a *Site from SitesDB where a member *Sliver has an IP
-// equal to input net.IP
-func getSiteWithIP(ip net.IP) *Site {
-	for _, site := range SitesDB {
-		for _, sliver := range site.Slivers {
-			if sliver.IP.Equal(ip) {
-				return site
-			}
-		}
-	}
-	return nil
 }

@@ -14,6 +14,33 @@
 
 package rtt
 
+import (
+	"appengine"
+	"appengine/urlfetch"
+	"code.google.com/p/golog2bq/log2bq"
+	"code.google.com/p/google-api-go-client/bigquery/v2"
+	"fmt"
+	"net"
+	"net/http"
+	"sort"
+	"strconv"
+	"time"
+)
+
+const URLBQDailyImport = "/rtt/cron.daily/import"
+
+func init() {
+	http.HandleFunc(URLBQDailyImport, bqImportDaily)
+}
+
+// bqImportDaily is invoked as a daily cronjob to pull 2 day-old information
+// from BigQuery to update the RTT database
+func bqImportDaily(w http.ResponseWriter, r *http.Request) {
+	t := time.Now()
+	t = t.Add(time.Duration(-24 * 2 * time.Hour)) //Reduce time by 2 days
+	BQImportDay(r, t)
+}
+
 // bqQueryFormat is the query used to pull RTT data from the M-Lab BigQuery
 // dataset.
 // NOTE: It must be formatted with Table Name, Year, Month, Day, Year, Month,
@@ -32,7 +59,7 @@ package rtt
 //
 // The result is grouped by time and the IPs such that multiple traceroute rtt
 // entries can be averaged.
-//
+
 // The result is ordered by server and client IPs to allow for more efficient
 // traversal of response entries.
 const bqQueryFormat = `SELECT
@@ -57,3 +84,159 @@ const bqQueryFormat = `SELECT
 	ORDER BY
 		paris_traceroute_hop.dest_ip,
 		connection_spec.server_ip;`
+
+// bqInit logs in to bigquery using OAuth and returns a *bigquery.Service with
+// which to make queries to bigquery.
+func bqInit(r *http.Request) (*bigquery.Service, error) {
+	c := appengine.NewContext(r)
+
+	// Get transport from log2bq's utility function GAETransport
+	transport, err := log2bq.GAETransport(c, bigquery.BigqueryScope)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set maximum urlfetch request deadline
+	transport.Transport = &urlfetch.Transport{
+		Context:  c,
+		Deadline: time.Minute,
+	}
+
+	// Get http.Client from transport
+	client, err := transport.Client()
+	if err != nil {
+		return nil, err
+	}
+
+	service, err := bigquery.New(client)
+	return service, err
+}
+
+const (
+	dateFormat = "2006-01-02"
+	timeFormat = "2006-01-02 15:04:05"
+)
+
+// BQImportDay queries BigQuery for RTT data from a specific day and stores new
+// data into datastore
+func BQImportDay(r *http.Request, t time.Time) {
+	c := appengine.NewContext(r)
+	service, err := bqInit(r)
+	if err != nil {
+		c.Errorf("rtt: BQImportDay.bqInit: %s", err)
+		return
+	}
+
+	// Format strings to insert into bqQueryFormat
+	tableName := fmt.Sprintf("measurement-lab:m_lab.%.4d_%.2d", t.Year(), t.Month())
+	dateStr := t.Format(dateFormat)
+	startTime, _ := time.Parse(timeFormat, dateStr+" 00:00:00")
+	endTime, _ := time.Parse(timeFormat, dateStr+" 23:59:59")
+
+	// Construct query
+	qText := fmt.Sprintf(bqQueryFormat, tableName, startTime.Unix(), endTime.Unix())
+	q := &bigquery.QueryRequest{
+		Query:     qText,
+		TimeoutMs: 60000,
+	}
+	c.Debugf("rtt: BQImportDay.qText (%s): %s", dateStr, qText)
+
+	queryCall := bigquery.NewJobsService(service).Query("mlab-ns2", q)
+	response, err := queryCall.Do()
+	if err != nil {
+		c.Errorf("rtt: BQImportDay.bigquery.JobsService.Query: %s", err)
+		return
+	}
+	c.Debugf("rtt: Processing %d rows from query response.", len(response.Rows))
+
+	NewCGs := bqProcessQuery(c, response)
+	RTTDB = NewCGs
+
+	err = bqMergeWithDatastore(c, NewCGs)
+	if err != nil {
+		c.Errorf("rtt: BQImportDay.bqMergeWithDatastore: %s", err)
+	}
+}
+
+// bqProcessQuery processes the output of the BigQuery query performed in
+// BQImport and parses the response into data structures.
+func bqProcessQuery(c appengine.Context, r *bigquery.QueryResponse) map[string]*ClientGroup {
+	var prevClientIP, prevServerIP, clientIP, serverIP string
+	var clientCG *ClientGroup
+	var site *Site
+	var rtt float64
+	var rttdata *SiteRTT
+	var lastUpdatedInt int64
+	var ok bool
+	var err error
+
+	CGs := make(map[string]*ClientGroup)
+
+	for _, row := range r.Rows {
+		serverIP = row.F[1].V.(string)
+		if serverIP != prevServerIP {
+			site, ok = SliversDB[serverIP]
+			if !ok {
+				c.Errorf("rtt: bqProcessQuery.getSiteWithIP: %s is not associated with any site", serverIP)
+				continue
+			}
+			prevServerIP = serverIP
+		}
+
+		clientIP = row.F[2].V.(string)
+		if clientIP != prevClientIP {
+			clientCG, ok = CGs[clientIP]
+			if !ok {
+				clientCG = &ClientGroup{
+					Prefix:   GetClientGroup(net.ParseIP(clientIP)).IP,
+					SiteRTTs: make([]*SiteRTT, 0),
+				}
+				CGs[clientIP] = clientCG
+			}
+			prevClientIP = clientIP
+		}
+
+		// Parse RTT from string entry
+		// Use second last entry to exclude last hop
+		rtt, err = strconv.ParseFloat(row.F[3].V.(string), 64)
+		if err != nil {
+			c.Errorf("rtt: bqProcessQuery.ParseFloat: %s", err)
+			continue
+		}
+
+		// Compare with existing data and update if less
+		rttdata = nil
+		for _, sitertt := range clientCG.SiteRTTs {
+			if sitertt.SiteID == site.ID {
+				rttdata = sitertt
+			}
+		}
+		if rttdata == nil {
+			rttdata = &SiteRTT{SiteID: site.ID}
+			clientCG.SiteRTTs = append(clientCG.SiteRTTs, rttdata)
+		}
+
+		// If rtt data has not been recorded or if rtt is less than existing data's rtt.
+		if rttdata.RTT == 0.0 || rtt <= rttdata.RTT {
+			rttdata.RTT = rtt
+
+			// Update time on which RTT was logged
+			lastUpdatedInt, err = strconv.ParseInt(row.F[0].V.(string), 10, 64)
+			if err != nil {
+				c.Errorf("rtt: bqProcessQuery.ParseInt: %s", err)
+			}
+			rttdata.LastUpdated = time.Unix(lastUpdatedInt, 0)
+		}
+	}
+
+	// Sort ClientGroups' SiteRTTs in ascending RTT order
+	for _, cg := range CGs {
+		sort.Sort(cg.SiteRTTs)
+	}
+
+	return CGs
+}
+
+func bqMergeWithDatastore(c appengine.Context, NewCGs map[string]*ClientGroup) error {
+	return nil
+}

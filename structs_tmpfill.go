@@ -22,6 +22,7 @@ import (
 func init() {
 	for _, sliver := range Slivers {
 		sliver.Site.Slivers = append(sliver.Site.Slivers, sliver)
+		SliversDB[sliver.IP.String()] = sliver.Site
 	}
 }
 

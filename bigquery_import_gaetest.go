@@ -15,6 +15,8 @@ func init() {
 	http.HandleFunc(URLBQTestShow, bqshow)
 }
 
+var RTTDB map[string]*ClientGroup
+
 func bqbuild(w http.ResponseWriter, r *http.Request) {
 	bqImportDaily(w, r)
 	fmt.Fprintf(w, "<h1>%d ClientGroup-Server pairs processed.</h1>", len(RTTDB))
