@@ -16,6 +16,7 @@ package rtt
 
 import (
 	"appengine"
+	"appengine/datastore"
 	"appengine/urlfetch"
 	"code.google.com/p/golog2bq/log2bq"
 	"code.google.com/p/google-api-go-client/bigquery/v2"
@@ -149,10 +150,10 @@ func BQImportDay(r *http.Request, t time.Time) {
 	}
 	c.Debugf("rtt: Processing %d rows from query response.", len(response.Rows))
 
-	NewCGs := bqProcessQuery(c, response)
-	RTTDB = NewCGs
+	newCGs := bqProcessQuery(c, response)
+	RTTDB = newCGs
 
-	err = bqMergeWithDatastore(c, NewCGs)
+	err = bqMergeWithDatastore(c, newCGs)
 	if err != nil {
 		c.Errorf("rtt: BQImportDay.bqMergeWithDatastore: %s", err)
 	}
@@ -237,6 +238,60 @@ func bqProcessQuery(c appengine.Context, r *bigquery.QueryResponse) map[string]*
 	return CGs
 }
 
-func bqMergeWithDatastore(c appengine.Context, NewCGs map[string]*ClientGroup) error {
+func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) error {
+	rttKey := datastore.NewKey(c, "string", "rtt", 0, nil)
+	nNewCGs := len(newCGs)
+	keys := make([]*datastore.Key, 0, nNewCGs)
+	for cgStr, _ := range newCGs {
+		keys = append(keys, datastore.NewKey(c, "ClientGroup", cgStr, 0, rttKey))
+	}
+
+	// Get ClientGroup data from Datastore
+	var oldCGs []ClientGroup
+	var newCGsToPut []*ClientGroup
+	var newKeys []*datastore.Key
+	var cg *ClientGroup
+	var err error
+	var merr appengine.MultiError
+	var i_s, i_e, i_n int
+	for i, n := 0, nNewCGs/1000+1; i < n; i++ {
+		i_s = i * 1000
+		i_e = i_s + 1000
+		if i_e >= nNewCGs {
+			i_e = nNewCGs
+		}
+		i_n = i_e - i*1000
+
+		oldCGs = make([]ClientGroup, i_n)
+		newKeys = make([]*datastore.Key, 0, i_n)
+		newCGsToPut = make([]*ClientGroup, 0, i_n)
+		err = datastore.GetMulti(c, keys[i_s:i_e], oldCGs)
+		switch err.(type) {
+		case appengine.MultiError:
+			merr = err.(appengine.MultiError)
+			for i_cg, e := range merr {
+				cg = newCGs[keys[i_cg].StringID()]
+				switch e {
+				case datastore.ErrNoSuchEntity:
+					newKeys = append(newKeys, keys[i_cg])
+					newCGsToPut = append(newCGsToPut, cg)
+				case nil:
+					c.Errorf("rtt: bqMergeWithDatastore.datastore.GetMulti: Need to merge.")
+				default:
+					c.Errorf("rtt: bqMergeWithDatastore.datastore.GetMulti: %s", err)
+				}
+			}
+		default:
+			if err != nil {
+				c.Errorf("rtt: bqMergeWithDatastore.datastore.GetMulti: %s", err)
+			}
+		}
+
+		_, err = datastore.PutMulti(c, keys[i_s:i_e], newCGsToPut)
+		if err != nil {
+			c.Errorf("rtt: bqMergeWithDatastore.datastore.PutMulti: %s", err)
+		}
+		c.Debugf("%v", oldCGs)
+	}
 	return nil
 }
