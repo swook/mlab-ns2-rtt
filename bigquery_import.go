@@ -144,11 +144,10 @@ func BQImportDay(r *http.Request, t time.Time) {
 		c.Errorf("rtt: BQImportDay.bigquery.JobsService.Query: %s", err)
 		return
 	}
-	c.Debugf("rtt: Processing %d rows from query response.", len(response.Rows))
+	c.Debugf("rtt: Received %d rows in query response.", len(response.Rows))
 
 	newCGs := bqProcessQuery(c, response)
-	RTTDB = newCGs
-
+	c.Debugf("rtt: Reduced query response to %d rows. Merging into datastore.", len(newCGs))
 	err = bqMergeWithDatastore(c, newCGs)
 	if err != nil {
 		c.Errorf("rtt: BQImportDay.bqMergeWithDatastore: %s", err)
