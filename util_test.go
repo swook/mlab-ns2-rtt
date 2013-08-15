@@ -15,8 +15,11 @@
 package rtt
 
 import (
+	"fmt"
 	"net"
+	"reflect"
 	"testing"
+	"time"
 )
 
 var getClientGroupTests = []struct {
@@ -56,6 +59,67 @@ func TestIsEqualClientGroup(t *testing.T) {
 		ok = IsEqualClientGroup(net.ParseIP(tt.a), net.ParseIP(tt.b))
 		if ok != tt.ok {
 			t.Fatalf("IsEqualClientGroup(%v, %v) = %v, want %v", tt.a, tt.b, ok, tt.ok)
+		}
+	}
+}
+
+var mergeClientGroupsTests = []struct {
+	oldIn *ClientGroup
+	newIn *ClientGroup
+	out   *ClientGroup
+}{
+	// Case with new insert and update of old value
+	{
+		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
+			SiteRTT{"abc01", 1.1, time.Unix(1, 0)},
+		}},
+		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
+			SiteRTT{"abc01", 0.9, time.Unix(3, 0)},
+			SiteRTT{"def01", 4.2, time.Unix(2, 0)},
+		}},
+		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
+			SiteRTT{"abc01", 0.9, time.Unix(3, 0)},
+			SiteRTT{"def01", 4.2, time.Unix(2, 0)},
+		}},
+	},
+	// Case with new insert only
+	{
+		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
+			SiteRTT{"abc01", 0.9, time.Unix(3, 0)},
+		}},
+		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
+			SiteRTT{"def01", 4.2, time.Unix(2, 0)},
+		}},
+		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
+			SiteRTT{"abc01", 0.9, time.Unix(3, 0)},
+			SiteRTT{"def01", 4.2, time.Unix(2, 0)},
+		}},
+	},
+	// Update two old values
+	{
+		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
+			SiteRTT{"abc01", 0.9, time.Unix(3, 0)},
+			SiteRTT{"def01", 4.2, time.Unix(2, 0)},
+		}},
+		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
+			SiteRTT{"abc01", 0.7, time.Unix(4, 0)},
+			SiteRTT{"def01", 4.0, time.Unix(5, 0)},
+		}},
+		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
+			SiteRTT{"abc01", 0.7, time.Unix(4, 0)},
+			SiteRTT{"def01", 4.0, time.Unix(5, 0)},
+		}},
+	},
+}
+
+func TestMergeClientGroups(t *testing.T) {
+	var err error
+	var newCGStr string
+	for _, tt := range mergeClientGroupsTests {
+		newCGStr = fmt.Sprintf("%v", tt.oldIn)
+		err = MergeClientGroups(tt.oldIn, tt.newIn)
+		if err != nil || !reflect.DeepEqual(tt.oldIn, tt.out) {
+			t.Fatalf("MergeClientGroups(%s, %v) = %v, want %v", newCGStr, tt.newIn, tt.oldIn, tt.out)
 		}
 	}
 }

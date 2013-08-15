@@ -22,8 +22,15 @@ import (
 // ClientGroup contains an aggregation of RTT information by /v4PrefixSize or
 // /v6PrefixSize
 type ClientGroup struct {
-	Prefix   net.IP
+	Prefix   []byte
 	SiteRTTs SiteRTTs
+}
+
+func NewClientGroup(ip net.IP) *ClientGroup {
+	return &ClientGroup{
+		Prefix:   []byte(ip),
+		SiteRTTs: make(SiteRTTs, 0),
+	}
 }
 
 // SiteRTT contains information of a ClientGroup's aggregated RTT to a Site.
@@ -36,7 +43,7 @@ type SiteRTT struct {
 }
 
 // SiteRTTs is a list of RTT data from ClientGroup to Site
-type SiteRTTs []*SiteRTT
+type SiteRTTs []SiteRTT
 
 // Less allows for the sorting of SiteRTTs in a *ClientGroup
 func (l SiteRTTs) Less(i, j int) bool {

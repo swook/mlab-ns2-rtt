@@ -16,7 +16,9 @@
 package rtt
 
 import (
+	"fmt"
 	"net"
+	"sort"
 )
 
 const (
@@ -43,4 +45,57 @@ func GetClientGroup(ip net.IP) *net.IPNet {
 func IsEqualClientGroup(a, b net.IP) bool {
 	ipnet := GetClientGroup(a)
 	return ipnet.Contains(b)
+}
+
+// MergeSiteRTT
+func MergeSiteRTTs(oldSR, newSR *SiteRTT) error {
+	if oldSR.SiteID != newSR.SiteID {
+		return fmt.Errorf("New SiteRTT for Site %s cannot be merged into Site %s SiteRTT", newSR.SiteID, oldSR.SiteID)
+	}
+	if newSR.RTT <= oldSR.RTT {
+		oldSR.RTT = newSR.RTT
+		oldSR.LastUpdated = newSR.LastUpdated
+	}
+	return nil
+}
+
+// MergeClientGroups merges a new ClientGroup's set of SiteRTTs with an old
+// ClientGroup's set of SiteRTTs. Used for merging new bigquery data with
+// existing datastore data.
+func MergeClientGroups(oldCG, newCG *ClientGroup) error {
+	oIP, nIP := net.IP(oldCG.Prefix), net.IP(newCG.Prefix)
+	if !oIP.Equal(nIP) {
+		return fmt.Errorf("Old CG %s not equal to new CG %s. Cannot merge.", oIP, nIP)
+	}
+
+	// Populate temporary maps to ease merge
+	oRTTs := make(map[string]*SiteRTT)
+	nRTTs := make(map[string]*SiteRTT)
+	for i, s := range oldCG.SiteRTTs {
+		oRTTs[s.SiteID] = &oldCG.SiteRTTs[i]
+	}
+	for i, s := range newCG.SiteRTTs {
+		nRTTs[s.SiteID] = &newCG.SiteRTTs[i]
+	}
+
+	// Keep SiteRTT with lower RTT
+	var os *SiteRTT
+	var ok bool
+	for k, ns := range nRTTs {
+		os, ok = oRTTs[k]
+		if !ok {
+			oRTTs[k] = ns
+		} else {
+			MergeSiteRTTs(os, ns)
+		}
+	}
+
+	// Create new list of SiteRTTs
+	oldCG.SiteRTTs = make(SiteRTTs, 0, len(oRTTs))
+	for _, s := range oRTTs {
+		oldCG.SiteRTTs = append(oldCG.SiteRTTs, *s)
+	}
+	sort.Sort(oldCG.SiteRTTs)
+
+	return nil
 }

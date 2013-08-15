@@ -19,8 +19,6 @@ package rtt
 import (
 	"appengine"
 	"appengine/datastore"
-	"appengine/urlfetch"
-	"code.google.com/p/golog2bq/log2bq"
 	"code.google.com/p/google-api-go-client/bigquery/v2"
 	"fmt"
 	"net"
@@ -158,10 +156,13 @@ func BQImportDay(r *http.Request, t time.Time) {
 // BQImport and parses the response into data structures.
 func bqProcessQuery(c appengine.Context, r *bigquery.QueryResponse) map[string]*ClientGroup {
 	var prevClientIP, prevServerIP, clientIP, serverIP string
+	var clientCGIP net.IP
+	var clientCGIPStr string
 	var clientCG *ClientGroup
 	var site *Site
 	var rtt float64
-	var rttdata *SiteRTT
+	var rttData SiteRTT
+	var rttDataIdx int
 	var lastUpdatedInt int64
 	var ok bool
 	var err error
@@ -181,13 +182,12 @@ func bqProcessQuery(c appengine.Context, r *bigquery.QueryResponse) map[string]*
 
 		clientIP = row.F[2].V.(string)
 		if clientIP != prevClientIP {
-			clientCG, ok = CGs[clientIP]
+			clientCGIP = GetClientGroup(net.ParseIP(clientIP)).IP
+			clientCGIPStr = clientCGIP.String()
+			clientCG, ok = CGs[clientCGIPStr]
 			if !ok {
-				clientCG = &ClientGroup{
-					Prefix:   GetClientGroup(net.ParseIP(clientIP)).IP,
-					SiteRTTs: make([]*SiteRTT, 0),
-				}
-				CGs[clientIP] = clientCG
+				clientCG = NewClientGroup(clientCGIP)
+				CGs[clientCGIPStr] = clientCG
 			}
 			prevClientIP = clientIP
 		}
@@ -200,28 +200,32 @@ func bqProcessQuery(c appengine.Context, r *bigquery.QueryResponse) map[string]*
 			continue
 		}
 
-		// Compare with existing data and update if less
-		rttdata = nil
-		for _, sitertt := range clientCG.SiteRTTs {
+		// Insert into SiteRTTs list
+		ok = false
+		for i, sitertt := range clientCG.SiteRTTs {
 			if sitertt.SiteID == site.ID {
-				rttdata = sitertt
+				rttDataIdx = i
+				rttData = sitertt
+				ok = true
 			}
 		}
-		if rttdata == nil {
-			rttdata = &SiteRTT{SiteID: site.ID}
-			clientCG.SiteRTTs = append(clientCG.SiteRTTs, rttdata)
+		if !ok {
+			rttDataIdx = len(clientCG.SiteRTTs)
+			rttData = SiteRTT{SiteID: site.ID}
+			clientCG.SiteRTTs = append(clientCG.SiteRTTs, rttData)
 		}
 
 		// If rtt data has not been recorded or if rtt is less than existing data's rtt.
-		if rttdata.RTT == 0.0 || rtt <= rttdata.RTT {
-			rttdata.RTT = rtt
+		if !ok || rtt <= rttData.RTT {
+			rttData.RTT = rtt
 
 			// Update time on which RTT was logged
 			lastUpdatedInt, err = strconv.ParseInt(row.F[0].V.(string), 10, 64)
 			if err != nil {
 				c.Errorf("rtt: bqProcessQuery.ParseInt: %s", err)
 			}
-			rttdata.LastUpdated = time.Unix(lastUpdatedInt, 0)
+			rttData.LastUpdated = time.Unix(lastUpdatedInt, 0)
+			clientCG.SiteRTTs[rttDataIdx] = rttData
 		}
 	}
 
@@ -243,50 +247,54 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) e
 
 	// Get ClientGroup data from Datastore
 	var oldCGs []ClientGroup
-	var newCGsToPut []*ClientGroup
-	var newKeys []*datastore.Key
-	var cg *ClientGroup
+	var newCG *ClientGroup
 	var err error
 	var merr appengine.MultiError
-	var i_s, i_e, i_n int
-	for i, n := 0, nNewCGs/1000+1; i < n; i++ {
-		i_s = i * 1000
-		i_e = i_s + 1000
+	var i_s, i_e, i_n, i_cg int
+	for i, n := 0, nNewCGs/MaxDSWritePerQuery+1; i < n; i++ {
+		i_s = i * MaxDSWritePerQuery
+		i_e = i_s + MaxDSWritePerQuery
 		if i_e >= nNewCGs {
 			i_e = nNewCGs
 		}
-		i_n = i_e - i*1000
+		i_n = i_e - i*MaxDSWritePerQuery
 
 		oldCGs = make([]ClientGroup, i_n)
-		newKeys = make([]*datastore.Key, 0, i_n)
-		newCGsToPut = make([]*ClientGroup, 0, i_n)
 		err = datastore.GetMulti(c, keys[i_s:i_e], oldCGs)
+
 		switch err.(type) {
 		case appengine.MultiError:
 			merr = err.(appengine.MultiError)
-			for i_cg, e := range merr {
-				cg = newCGs[keys[i_cg].StringID()]
+			for i_q, e := range merr {
+				i_cg = i_s + i_q
+				newCG = newCGs[keys[i_cg].StringID()]
 				switch e {
 				case datastore.ErrNoSuchEntity:
-					newKeys = append(newKeys, keys[i_cg])
-					newCGsToPut = append(newCGsToPut, cg)
+					oldCGs[i_q] = *newCG
 				case nil:
-					c.Errorf("rtt: bqMergeWithDatastore.datastore.GetMulti: Need to merge.")
+					if err := MergeClientGroups(&oldCGs[i_q], newCG); err != nil {
+						c.Errorf("rtt: bqMergeWithDatastore.MergeClientGroups: %s", err)
+					}
 				default:
 					c.Errorf("rtt: bqMergeWithDatastore.datastore.GetMulti: %s", err)
 				}
 			}
-		default:
-			if err != nil {
-				c.Errorf("rtt: bqMergeWithDatastore.datastore.GetMulti: %s", err)
+		case nil:
+			for i_q, _ := range oldCGs {
+				i_cg = i_s + i_q
+				newCG = newCGs[keys[i_cg].StringID()]
+				if err := MergeClientGroups(&oldCGs[i_q], newCG); err != nil {
+					c.Errorf("rtt: bqMergeWithDatastore.MergeClientGroups: %s", err)
+				}
 			}
+		default:
+			c.Errorf("rtt: bqMergeWithDatastore.datastore.GetMulti: %s", err)
 		}
 
-		_, err = datastore.PutMulti(c, keys[i_s:i_e], newCGsToPut)
+		_, err = datastore.PutMulti(c, keys[i_s:i_e], oldCGs)
 		if err != nil {
 			c.Errorf("rtt: bqMergeWithDatastore.datastore.PutMulti: %s", err)
 		}
-		c.Debugf("%v", oldCGs)
 	}
 	return nil
 }
