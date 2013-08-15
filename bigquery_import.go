@@ -30,7 +30,10 @@ import (
 	"time"
 )
 
-const URLBQDailyImport = "/rtt/cron.daily/import"
+const (
+	URLBQDailyImport   = "/rtt/cron.daily/import"
+	MaxDSWritePerQuery = 500
+)
 
 func init() {
 	http.HandleFunc(URLBQDailyImport, bqImportDaily)
