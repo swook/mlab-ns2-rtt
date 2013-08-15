@@ -94,22 +94,13 @@ const bqQueryFormat = `SELECT
 // bqInit logs in to bigquery using OAuth and returns a *bigquery.Service with
 // which to make queries to bigquery.
 func bqInit(r *http.Request) (*bigquery.Service, error) {
-	c := appengine.NewContext(r)
-
-	// Get transport from log2bq's utility function GAETransport
-	transport, err := log2bq.GAETransport(c, bigquery.BigqueryScope)
-	if err != nil {
-		return nil, err
+	var client *http.Client
+	var err error
+	if appengine.IsDevAppServer() {
+		client, err = bqLoginDev(r)
+	} else {
+		client, err = bqLogin(r)
 	}
-
-	// Set maximum urlfetch request deadline
-	transport.Transport = &urlfetch.Transport{
-		Context:  c,
-		Deadline: time.Minute,
-	}
-
-	// Get http.Client from transport
-	client, err := transport.Client()
 	if err != nil {
 		return nil, err
 	}
