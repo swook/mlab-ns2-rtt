@@ -1,3 +1,5 @@
+// +build appengine
+
 // Copyright 2013 M-Lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
