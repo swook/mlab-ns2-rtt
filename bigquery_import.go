@@ -26,14 +26,14 @@ import (
 	"net"
 	"net/http"
 	"sort"
-	"strconv"
 	"time"
 )
 
 const (
-	URLBQImportDaily   = "/rtt/import/daily"
-	URLBQImportAll     = "/rtt/import/all"
-	MaxDSWritePerQuery = 500
+	URLBQImportDaily          = "/rtt/import/daily"
+	URLBQImportAll            = "/rtt/import/all"
+	MaxDSWritePerQuery        = 500
+	BigQueryBillableProjectID = "mlab-ns2"
 )
 
 func init() {
@@ -157,85 +157,73 @@ func BQImportDay(r *http.Request, t time.Time) {
 	}
 	c.Debugf("rtt: BQImportDay.qText (%s): %s", dateStr, qText)
 
-	queryCall := bigquery.NewJobsService(service).Query("mlab-ns2", q)
+	jobsService := bigquery.NewJobsService(service)
+	queryCall := jobsService.Query(BigQueryBillableProjectID, q)
 	response, err := queryCall.Do()
 	if err != nil {
 		c.Errorf("rtt: BQImportDay.bigquery.JobsService.Query: %s", err)
 		return
 	}
-	c.Debugf("rtt: Received %d rows in query response.", len(response.Rows))
+	c.Debugf("rtt: Received %d rows in query response (%d Total Rows).", len(response.Rows), response.TotalRows)
+	data := simplifyBQResponse(response.Rows)
 
-	newCGs := bqProcessQuery(c, response)
+	// Request for more results in case results paginated.
+	projID := response.JobReference.ProjectId
+	jobID := response.JobReference.JobId
+	pageToken := response.PageToken
+	response = nil
+
+	n := len(response.Rows)
+	if n < int(response.TotalRows) {
+		getQueryResultsCall := jobsService.GetQueryResults(projID, jobID)
+		var respGetQueryResults *bigquery.GetQueryResultsResponse
+		for n < int(response.TotalRows) {
+			getQueryResultsCall.PageToken(pageToken)
+			respGetQueryResults, err = getQueryResultsCall.Do()
+			if err != nil {
+				c.Errorf("rtt: BQImportDay.bigquery.JobsGetQueryResponseCall: %s", err)
+				return
+			}
+			pageToken = respGetQueryResults.PageToken
+			data = append(data, simplifyBQResponse(respGetQueryResults.Rows)...)
+			c.Debugf("rtt: Received additional %d rows in query response.", len(respGetQueryResults.Rows))
+			n += len(respGetQueryResults.Rows)
+			c.Debugf("rtt: %d rows received in total.", n)
+		}
+	}
+
+	newCGs := bqProcessQuery(c, data)
 	c.Debugf("rtt: Reduced query response to %d rows. Merging into datastore.", len(newCGs))
 
 	bqMergeWithDatastore(c, newCGs)
 }
 
-// SortableBQRows allows for the sorting of received BigQuery row data by client
-// IP string
-type SortableBQRows []*bigquery.TableRow
-
-func (r SortableBQRows) Less(i, j int) bool {
-	return r[i].F[2].V.(string) < r[j].F[2].V.(string)
-}
-
-func (r SortableBQRows) Swap(i, j int) {
-	r[i], r[j] = r[j], r[i]
-}
-
-func (r SortableBQRows) Len() int {
-	return len(r)
-}
-
 // bqProcessQuery processes the output of the BigQuery query performed in
 // BQImport and parses the response into data structures.
-func bqProcessQuery(c appengine.Context, r *bigquery.QueryResponse) map[string]*ClientGroup {
-	sr := SortableBQRows(r.Rows)
-	sort.Sort(&sr)
-
-	var prevClientIP, prevServerIP, clientIP, serverIP string
+func bqProcessQuery(c appengine.Context, rows bqRows) map[string]*ClientGroup {
 	var clientCGIP net.IP
 	var clientCGIPStr string
 	var clientCG *ClientGroup
 	var site *Site
-	var rtt float64
 	var rttData SiteRTT
 	var rttDataIdx int
-	var lastUpdatedInt int64
 	var ok bool
-	var err error
 
 	CGs := make(map[string]*ClientGroup)
 
-	for _, row := range sr {
-		serverIP = row.F[1].V.(string)
-		if serverIP != prevServerIP {
-			site, ok = SliversDB[serverIP]
-			if !ok {
-				c.Errorf("rtt: bqProcessQuery.getSiteWithIP: %s is not associated with any site", serverIP)
-				continue
-			}
-			prevServerIP = serverIP
-		}
-
-		clientIP = row.F[2].V.(string)
-		if clientIP != prevClientIP {
-			clientCGIP = GetClientGroup(net.ParseIP(clientIP)).IP
-			clientCGIPStr = clientCGIP.String()
-			clientCG, ok = CGs[clientCGIPStr]
-			if !ok {
-				clientCG = NewClientGroup(clientCGIP)
-				CGs[clientCGIPStr] = clientCG
-			}
-			prevClientIP = clientIP
-		}
-
-		// Parse RTT from string entry
-		// Use second last entry to exclude last hop
-		rtt, err = strconv.ParseFloat(row.F[3].V.(string), 64)
-		if err != nil {
-			c.Errorf("rtt: bqProcessQuery.ParseFloat: %s", err)
+	for _, row := range rows {
+		site, ok = SliversDB[row.serverIP.String()]
+		if !ok {
+			c.Errorf("rtt: bqProcessQuery.getSiteWithIP: %s is not associated with any site", row.serverIP)
 			continue
+		}
+
+		clientCGIP = GetClientGroup(row.clientIP).IP
+		clientCGIPStr = clientCGIP.String()
+		clientCG, ok = CGs[clientCGIPStr]
+		if !ok {
+			clientCG = NewClientGroup(clientCGIP)
+			CGs[clientCGIPStr] = clientCG
 		}
 
 		// Insert into SiteRTTs list
@@ -254,15 +242,9 @@ func bqProcessQuery(c appengine.Context, r *bigquery.QueryResponse) map[string]*
 		}
 
 		// If rtt data has not been recorded or if rtt is less than existing data's rtt.
-		if !ok || rtt <= rttData.RTT {
-			rttData.RTT = rtt
-
-			// Update time on which RTT was logged
-			lastUpdatedInt, err = strconv.ParseInt(row.F[0].V.(string), 10, 64)
-			if err != nil {
-				c.Errorf("rtt: bqProcessQuery.ParseInt: %s", err)
-			}
-			rttData.LastUpdated = time.Unix(lastUpdatedInt, 0)
+		if !ok || row.rtt <= rttData.RTT {
+			rttData.RTT = row.rtt
+			rttData.LastUpdated = row.lastUpdated
 			clientCG.SiteRTTs[rttDataIdx] = rttData
 		}
 	}
@@ -271,15 +253,7 @@ func bqProcessQuery(c appengine.Context, r *bigquery.QueryResponse) map[string]*
 	for _, cg := range CGs {
 		sort.Sort(cg.SiteRTTs)
 	}
-
 	return CGs
-}
-
-// dsWriteChunk is a structure with which new ClientGroup lists can be split
-// into lengths <= MaxDSWritePerQuery such that datastore.PutMulti works.
-type dsWriteChunk struct {
-	Keys []*datastore.Key
-	CGs  []*ClientGroup
 }
 
 // bqMergeWithDatastore takes a list of ClientGroup generated by bqProcessQuery
