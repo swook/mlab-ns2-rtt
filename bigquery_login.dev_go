@@ -21,15 +21,57 @@ import (
 	"appengine/memcache"
 	"appengine/urlfetch"
 	"code.google.com/p/goauth2/oauth"
+	"code.google.com/p/golog2bq/log2bq"
 	"code.google.com/p/google-api-go-client/bigquery/v2"
 	"errors"
 	"net/http"
 	"time"
 )
+)
 
 const (
 	dev_OAuthTokenKey = "dev_OAuthToken" // The key used to memcache oauth2 tokens for the dev server
 )
+
+// bqInit logs in to bigquery using OAuth and returns a *bigquery.Service with
+// which to make queries to bigquery.
+func bqInit(r *http.Request) (*bigquery.Service, error) {
+	var client *http.Client
+	var err error
+	if appengine.IsDevAppServer() {
+		client, err = bqLoginDev(r)
+	} else {
+		client, err = bqLogin(r)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	service, err := bigquery.New(client)
+	return service, err
+}
+
+func bqLogin(r *http.Request) (*http.Client, error) {
+	c := appengine.NewContext(r)
+
+	// Get transport from log2bq's utility function GAETransport
+	transport, err := log2bq.GAETransport(c, bigquery.BigqueryScope)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set maximum urlfetch request deadline
+	transport.Transport = &urlfetch.Transport{
+		Context:  c,
+		Deadline: time.Minute,
+	}
+
+	client, err := transport.Client()
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
+}
 
 // Login to BQ using goauth2. Note that the authentication URL is displayed in
 // dev_appserver.py logs while an instance is running locally.

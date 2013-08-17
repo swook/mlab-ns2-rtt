@@ -19,6 +19,8 @@ package rtt
 import (
 	"appengine"
 	"appengine/datastore"
+	"appengine/urlfetch"
+	"code.google.com/p/golog2bq/log2bq"
 	"code.google.com/p/google-api-go-client/bigquery/v2"
 	"fmt"
 	"net"
@@ -92,13 +94,21 @@ const bqQueryFormat = `SELECT
 // bqInit logs in to bigquery using OAuth and returns a *bigquery.Service with
 // which to make queries to bigquery.
 func bqInit(r *http.Request) (*bigquery.Service, error) {
-	var client *http.Client
-	var err error
-	if appengine.IsDevAppServer() {
-		client, err = bqLoginDev(r)
-	} else {
-		client, err = bqLogin(r)
+	c := appengine.NewContext(r)
+
+	// Get transport from log2bq's utility function GAETransport
+	transport, err := log2bq.GAETransport(c, bigquery.BigqueryScope)
+	if err != nil {
+		return nil, err
 	}
+
+	// Set maximum urlfetch request deadline
+	transport.Transport = &urlfetch.Transport{
+		Context:  c,
+		Deadline: time.Minute,
+	}
+
+	client, err := transport.Client()
 	if err != nil {
 		return nil, err
 	}
