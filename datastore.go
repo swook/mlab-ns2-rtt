@@ -24,6 +24,8 @@ import (
 	"net"
 )
 
+// DSGetClientGroup gets a ClientGroup entry from memcache if possible, and if
+// not, from datastore.
 func DSGetClientGroup(c appengine.Context, ip net.IP) (*ClientGroup, error) {
 	cgIP := GetClientGroup(ip).IP
 
@@ -34,7 +36,7 @@ func DSGetClientGroup(c appengine.Context, ip net.IP) (*ClientGroup, error) {
 		rttKey := datastore.NewKey(c, "string", "rtt", 0, nil)
 		key := datastore.NewKey(c, "ClientGroup", cgIP.String(), 0, rttKey)
 
-		cg = new(ClientGroup)
+		cg = new(ClientGroup) // Create nil entry for datastore to populate
 		if err := datastore.Get(c, key, cg); err != nil {
 			if err == datastore.ErrNoSuchEntity {
 				return nil, ErrNotEnoughData
@@ -50,11 +52,13 @@ func DSGetClientGroup(c appengine.Context, ip net.IP) (*ClientGroup, error) {
 	return cg, nil
 }
 
+// mcClientGroupKey returns a key for use in memcache.
 func mcClientGroupKey(c appengine.Context, ip net.IP) string {
 	key := fmt.Sprintf("rtt:ClientGroup:%s", ip)
 	return key
 }
 
+// mcGetClientGroup returns a ClientGroup stored in memcache.
 func mcGetClientGroup(c appengine.Context, ip net.IP) (*ClientGroup, error) {
 	var cg ClientGroup
 	key := mcClientGroupKey(c, ip)
@@ -65,6 +69,8 @@ func mcGetClientGroup(c appengine.Context, ip net.IP) (*ClientGroup, error) {
 	return &cg, nil
 }
 
+// mcSetClientGroup stores a ClientGroup in memcache for quicker serving of
+// ClientGroup data.
 func mcSetClientGroup(c appengine.Context, cg *ClientGroup) error {
 	item := &memcache.Item{
 		Key:    mcClientGroupKey(c, net.IP(cg.Prefix)),

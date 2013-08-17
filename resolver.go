@@ -38,6 +38,8 @@ func init() {
 	http.HandleFunc(URLRTTMain, RTTHandler)
 }
 
+// RTTHandler is a simple handler which uses the URL parameter 'url' or client's
+// IP to find a Sliver with lowest RTT.
 func RTTHandler(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 
@@ -56,6 +58,7 @@ func RTTHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// RTTResolver returns a Sliver from a Site with lowest RTT given a client's IP.
 func RTTResolver(c appengine.Context, ip net.IP) (net.IP, error) {
 	cg, err := DSGetClientGroup(c, ip)
 	if err != nil {
@@ -72,6 +75,7 @@ func RTTResolver(c appengine.Context, ip net.IP) (net.IP, error) {
 	return nil, nil
 }
 
+// PickRandomSliverFromSite returns a random Sliver's IP given a Site ID.
 func PickRandomSliverFromSite(siteID string) (net.IP, error) {
 	site, ok := SitesDB[siteID]
 	if !ok {
