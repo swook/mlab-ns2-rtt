@@ -18,7 +18,6 @@ package rtt
 
 import (
 	"appengine"
-	"appengine/datastore"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -60,12 +59,7 @@ func RTTHandler(w http.ResponseWriter, r *http.Request) {
 func RTTResolver(c appengine.Context, ip net.IP) (net.IP, error) {
 	cg, err := DSGetClientGroup(c, ip)
 	if err != nil {
-		switch err {
-		case datastore.ErrNoSuchEntity:
-			return nil, ErrNotEnoughData
-		default:
-			return nil, err
-		}
+		return nil, err
 	}
 
 	if len(cg.SiteRTTs) > 0 {

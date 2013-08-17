@@ -34,13 +34,14 @@ func DSGetClientGroup(c appengine.Context, ip net.IP) (*ClientGroup, error) {
 		rttKey := datastore.NewKey(c, "string", "rtt", 0, nil)
 		key := datastore.NewKey(c, "ClientGroup", cgIP.String(), 0, rttKey)
 
-		var cgList []ClientGroup
-		cgList = make([]ClientGroup, 1)
-		if err := datastore.GetMulti(c, []*datastore.Key{key}, cgList); err != nil {
+		cg = new(ClientGroup)
+		if err := datastore.Get(c, key, cg); err != nil {
+			if err == datastore.ErrNoSuchEntity {
+				return nil, ErrNotEnoughData
+			}
 			return nil, err
 		}
-		cg = &cgList[0]
-		mcSetClientGroup(c, cg)
+		// mcSetClientGroup(c, cg)
 	case nil:
 		return cg, nil
 	default:
