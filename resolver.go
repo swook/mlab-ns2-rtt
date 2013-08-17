@@ -70,7 +70,7 @@ func RTTResolver(c appengine.Context, ip net.IP) (net.IP, error) {
 
 	if len(cg.SiteRTTs) > 0 {
 		siteID := cg.SiteRTTs[0].SiteID
-		serverIP, err := PickRandomServerFromSite(siteID)
+		serverIP, err := PickRandomSliverFromSite(siteID)
 		return serverIP, err
 	} else {
 		return nil, ErrNotEnoughData
@@ -78,7 +78,7 @@ func RTTResolver(c appengine.Context, ip net.IP) (net.IP, error) {
 	return nil, nil
 }
 
-func PickRandomServerFromSite(siteID string) (net.IP, error) {
+func PickRandomSliverFromSite(siteID string) (net.IP, error) {
 	site, ok := SitesDB[siteID]
 	if !ok {
 		return nil, ErrInvalidSiteID
