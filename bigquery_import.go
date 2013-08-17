@@ -146,10 +146,8 @@ func BQImportDay(r *http.Request, t time.Time) {
 
 	newCGs := bqProcessQuery(c, response)
 	c.Debugf("rtt: Reduced query response to %d rows. Merging into datastore.", len(newCGs))
-	err = bqMergeWithDatastore(c, newCGs)
-	if err != nil {
-		c.Errorf("rtt: BQImportDay.bqMergeWithDatastore: %s", err)
-	}
+
+	bqMergeWithDatastore(c, newCGs)
 }
 
 // bqProcessQuery processes the output of the BigQuery query performed in
@@ -237,7 +235,7 @@ func bqProcessQuery(c appengine.Context, r *bigquery.QueryResponse) map[string]*
 	return CGs
 }
 
-func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) error {
+func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 	rttKey := datastore.NewKey(c, "string", "rtt", 0, nil)
 	nNewCGs := len(newCGs)
 	keys := make([]*datastore.Key, 0, nNewCGs)
@@ -296,5 +294,4 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) e
 			c.Errorf("rtt: bqMergeWithDatastore.datastore.PutMulti: %s", err)
 		}
 	}
-	return nil
 }
