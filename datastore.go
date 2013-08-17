@@ -43,7 +43,7 @@ func DSGetClientGroup(c appengine.Context, ip net.IP) (*ClientGroup, error) {
 			}
 			return nil, err
 		}
-		// mcSetClientGroup(c, cg)
+		mcSetClientGroup(c, cg)
 	case nil:
 		return cg, nil
 	default:
