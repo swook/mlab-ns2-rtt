@@ -323,7 +323,9 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 				case datastore.ErrNoSuchEntity: // New entry
 					oldCGs[i] = *chunk.CGs[i]
 				case nil: // Entry exists, merge new data with old data
-					if err := MergeClientGroups(&oldCGs[i], chunk.CGs[i]); err != nil {
+					if oldCGs[i].SiteRTTs == nil {
+						oldCGs[i] = *chunk.CGs[i]
+					} else if err := MergeClientGroups(&oldCGs[i], chunk.CGs[i]); err != nil {
 						c.Errorf("rtt: bqMergeWithDatastore.MergeClientGroups: %s", err)
 					}
 				default: // Other unknown error
