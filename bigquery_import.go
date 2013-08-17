@@ -100,10 +100,7 @@ const bqQueryFormat = `SELECT
 	GROUP EACH BY
 		log_time,
 		connection_spec.server_ip,
-		paris_traceroute_hop.dest_ip
-	ORDER BY
-		paris_traceroute_hop.dest_ip,
-		connection_spec.server_ip;`
+		paris_traceroute_hop.dest_ip;`
 
 // bqInit logs in to bigquery using OAuth and returns a *bigquery.Service with
 // which to make queries to bigquery.
@@ -174,9 +171,28 @@ func BQImportDay(r *http.Request, t time.Time) {
 	bqMergeWithDatastore(c, newCGs)
 }
 
+// SortableBQRows allows for the sorting of received BigQuery row data by client
+// IP string
+type SortableBQRows []*bigquery.TableRow
+
+func (r SortableBQRows) Less(i, j int) bool {
+	return r[i].F[2].V.(string) < r[j].F[2].V.(string)
+}
+
+func (r SortableBQRows) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
+func (r SortableBQRows) Len() int {
+	return len(r)
+}
+
 // bqProcessQuery processes the output of the BigQuery query performed in
 // BQImport and parses the response into data structures.
 func bqProcessQuery(c appengine.Context, r *bigquery.QueryResponse) map[string]*ClientGroup {
+	sr := SortableBQRows(r.Rows)
+	sort.Sort(&sr)
+
 	var prevClientIP, prevServerIP, clientIP, serverIP string
 	var clientCGIP net.IP
 	var clientCGIPStr string
@@ -191,7 +207,7 @@ func bqProcessQuery(c appengine.Context, r *bigquery.QueryResponse) map[string]*
 
 	CGs := make(map[string]*ClientGroup)
 
-	for _, row := range r.Rows {
+	for _, row := range sr {
 		serverIP = row.F[1].V.(string)
 		if serverIP != prevServerIP {
 			site, ok = SliversDB[serverIP]
