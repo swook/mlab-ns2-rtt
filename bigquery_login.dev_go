@@ -27,7 +27,6 @@ import (
 	"net/http"
 	"time"
 )
-)
 
 const (
 	dev_OAuthTokenKey = "dev_OAuthToken" // The key used to memcache oauth2 tokens for the dev server
