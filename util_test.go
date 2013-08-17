@@ -63,6 +63,37 @@ func TestIsEqualClientGroup(t *testing.T) {
 	}
 }
 
+var mergeSiteRTTsTests = []struct {
+	oldIn *SiteRTT
+	newIn *SiteRTT
+	out   *SiteRTT
+}{
+	// Case with lower RTT in new SiteRTT
+	{
+		&SiteRTT{"abc01", 1.1, time.Unix(1, 0)},
+		&SiteRTT{"abc01", 0.1, time.Unix(1, 1)},
+		&SiteRTT{"abc01", 0.1, time.Unix(1, 1)},
+	},
+	// Case with lower RTT in old SiteRTT
+	{
+		&SiteRTT{"abc01", 0.1, time.Unix(1, 0)},
+		&SiteRTT{"abc01", 1.1, time.Unix(1, 1)},
+		&SiteRTT{"abc01", 0.1, time.Unix(1, 0)},
+	},
+}
+
+func TestMergeSiteRTTs(t *testing.T) {
+	var err error
+	var newSiteRTTStr string
+	for _, tt := range mergeSiteRTTsTests {
+		newSiteRTTStr = fmt.Sprintf("%v", tt.oldIn)
+		err = MergeSiteRTTs(tt.oldIn, tt.newIn)
+		if err != nil || !reflect.DeepEqual(tt.oldIn, tt.out) {
+			t.Fatalf("MergeClientGroups(%s, %v) = %v, want %v", newSiteRTTStr, tt.newIn, tt.oldIn, tt.out)
+		}
+	}
+}
+
 var mergeClientGroupsTests = []struct {
 	oldIn *ClientGroup
 	newIn *ClientGroup
