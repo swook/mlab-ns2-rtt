@@ -19,8 +19,8 @@ package rtt
 import (
 	"appengine"
 	"appengine/datastore"
-	"appengine/urlfetch"
-	"code.google.com/p/golog2bq/log2bq"
+	// "appengine/urlfetch"
+	// "code.google.com/p/golog2bq/log2bq"
 	"code.google.com/p/google-api-go-client/bigquery/v2"
 	"fmt"
 	"net"
@@ -93,29 +93,29 @@ const bqQueryFormat = `SELECT
 
 // bqInit logs in to bigquery using OAuth and returns a *bigquery.Service with
 // which to make queries to bigquery.
-func bqInit(r *http.Request) (*bigquery.Service, error) {
-	c := appengine.NewContext(r)
+// func bqInit(r *http.Request) (*bigquery.Service, error) {
+// 	c := appengine.NewContext(r)
 
-	// Get transport from log2bq's utility function GAETransport
-	transport, err := log2bq.GAETransport(c, bigquery.BigqueryScope)
-	if err != nil {
-		return nil, err
-	}
+// 	// Get transport from log2bq's utility function GAETransport
+// 	transport, err := log2bq.GAETransport(c, bigquery.BigqueryScope)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	// Set maximum urlfetch request deadline
-	transport.Transport = &urlfetch.Transport{
-		Context:  c,
-		Deadline: 10 * time.Minute,
-	}
+// 	// Set maximum urlfetch request deadline
+// 	transport.Transport = &urlfetch.Transport{
+// 		Context:  c,
+// 		Deadline: 10 * time.Minute,
+// 	}
 
-	client, err := transport.Client()
-	if err != nil {
-		return nil, err
-	}
+// 	client, err := transport.Client()
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	service, err := bigquery.New(client)
-	return service, err
-}
+// 	service, err := bigquery.New(client)
+// 	return service, err
+// }
 
 const (
 	dateFormat = "2006-01-02"
