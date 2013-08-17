@@ -105,7 +105,7 @@ func bqInit(r *http.Request) (*bigquery.Service, error) {
 	// Set maximum urlfetch request deadline
 	transport.Transport = &urlfetch.Transport{
 		Context:  c,
-		Deadline: time.Minute,
+		Deadline: 10 * time.Minute,
 	}
 
 	client, err := transport.Client()
