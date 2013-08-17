@@ -177,18 +177,18 @@ func BQImportDay(r *http.Request, t time.Time) {
 
 	if n < totalN {
 		getQueryResultsCall := jobsService.GetQueryResults(projID, jobID)
-		var respGetQueryResults *bigquery.GetQueryResultsResponse
+		var respMore *bigquery.GetQueryResultsResponse
 		for n < totalN {
 			getQueryResultsCall.PageToken(pageToken)
-			respGetQueryResults, err = getQueryResultsCall.Do()
+			respMore, err = getQueryResultsCall.Do()
 			if err != nil {
 				c.Errorf("rtt: BQImportDay.bigquery.JobsGetQueryResponseCall: %s", err)
 				return
 			}
-			pageToken = respGetQueryResults.PageToken
-			data = append(data, simplifyBQResponse(respGetQueryResults.Rows)...)
-			c.Debugf("rtt: Received additional %d rows in query response.", len(respGetQueryResults.Rows))
-			n += len(respGetQueryResults.Rows)
+			pageToken = respMore.PageToken
+			data = append(data, simplifyBQResponse(respMore.Rows)...)
+			c.Debugf("rtt: Received additional %d rows in query response.", len(respMore.Rows))
+			n += len(respMore.Rows)
 			c.Debugf("rtt: %d rows received in total.", n)
 		}
 	}
