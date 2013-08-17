@@ -171,13 +171,14 @@ func BQImportDay(r *http.Request, t time.Time) {
 	projID := response.JobReference.ProjectId
 	jobID := response.JobReference.JobId
 	pageToken := response.PageToken
+	n := len(response.Rows)
+	totalN := int(response.TotalRows)
 	response = nil
 
-	n := len(response.Rows)
-	if n < int(response.TotalRows) {
+	if n < totalN {
 		getQueryResultsCall := jobsService.GetQueryResults(projID, jobID)
 		var respGetQueryResults *bigquery.GetQueryResultsResponse
-		for n < int(response.TotalRows) {
+		for n < totalN {
 			getQueryResultsCall.PageToken(pageToken)
 			respGetQueryResults, err = getQueryResultsCall.Do()
 			if err != nil {
