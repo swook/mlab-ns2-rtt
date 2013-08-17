@@ -31,12 +31,14 @@ import (
 )
 
 const (
-	URLBQDailyImport   = "/rtt/cron.daily/import"
+	URLBQImportDaily   = "/rtt/import/daily"
+	URLBQImportAll     = "/rtt/import/all"
 	MaxDSWritePerQuery = 500
 )
 
 func init() {
-	http.HandleFunc(URLBQDailyImport, bqImportDaily)
+	http.HandleFunc(URLBQImportDaily, bqImportDaily)
+	http.HandleFunc(URLBQImportAll, bqImportAllTime)
 }
 
 // bqImportDaily is invoked as a daily cronjob to pull 2 day-old information
@@ -45,6 +47,18 @@ func bqImportDaily(w http.ResponseWriter, r *http.Request) {
 	t := time.Now()
 	t = t.Add(time.Duration(-24 * 2 * time.Hour)) //Reduce time by 2 days
 	BQImportDay(r, t)
+}
+
+// bqImportAllTime imports all available BigQuery RTT data
+func bqImportAllTime(w http.ResponseWriter, r *http.Request) {
+	start := time.Unix(1371945577, 0) // First RTT data entry in BigQuery is unix time 1371945577
+	end := time.Now().Add(time.Duration(-24 * 2 * time.Hour))
+
+	// Add day until exceeds 2 days ago
+	day := time.Duration(24 * time.Hour)
+	for time := start; time.Before(end); time = time.Add(day) {
+		BQImportDay(r, time)
+	}
 }
 
 // bqQueryFormat is the query used to pull RTT data from the M-Lab BigQuery
