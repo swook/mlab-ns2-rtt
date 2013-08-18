@@ -24,12 +24,16 @@ import (
 	"code.google.com/p/golog2bq/log2bq"
 	"code.google.com/p/google-api-go-client/bigquery/v2"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 )
 
 const (
-	dev_OAuthTokenKey = "dev_OAuthToken" // The key used to memcache oauth2 tokens for the dev server
+	dev_OAuthIDKey     = "dev_OAuthID"
+	dev_OAuthSecretKey = "dev_OAuthSecret"
+	dev_OAuthCodeKey   = "dev_OAuthCode"
+	dev_OAuthTokenKey  = "dev_OAuthToken" // The key used to memcache oauth2 tokens for the dev server
 )
 
 // bqInit logs in to bigquery using OAuth and returns a *bigquery.Service with
@@ -72,31 +76,64 @@ func bqLogin(r *http.Request) (*http.Client, error) {
 	return client, nil
 }
 
+func bqLoginDevPrepare(w http.ResponseWriter, r *http.Request) {
+	c := appengine.NewContext(r)
+	id := r.FormValue("bq-id")
+	secret := r.FormValue("bq-secret")
+	code := r.FormValue("bq-code")
+
+	transport := getBQOAuthTransport(c, id, secret)
+	if code == "" {
+		requestOAuthAuth(w, transport.Config)
+	} else {
+		token, err := transport.Exchange(code)
+		if err != nil {
+			requestOAuthAuth(w, transport.Config)
+			return
+		}
+
+		memcache.JSON.Set(c, &memcache.Item{
+			Key:    dev_OAuthIDKey,
+			Object: id,
+		})
+		memcache.JSON.Set(c, &memcache.Item{
+			Key:    dev_OAuthSecretKey,
+			Object: secret,
+		})
+		memcache.JSON.Set(c, &memcache.Item{
+			Key:    dev_OAuthCodeKey,
+			Object: code,
+		})
+		memcache.JSON.Set(c, &memcache.Item{
+			Key:    dev_OAuthTokenKey,
+			Object: token,
+		})
+		fmt.Fprintf(w, "OAuth2 ID, Secret, Code, and Token for BigQuery, cached.")
+	}
+}
+
+func requestOAuthAuth(w http.ResponseWriter, config *oauth.Config) {
+	url := config.AuthCodeURL("")
+	fmt.Fprintf(w, `<p>Please visit <a href="%s">this link</a> and add the code to the request URI with parameter 'bq-code'.</p>`, url)
+}
+
 // Login to BQ using goauth2. Note that the authentication URL is displayed in
 // dev_appserver.py logs while an instance is running locally.
 func bqLoginDev(r *http.Request) (*http.Client, error) {
 	c := appengine.NewContext(r)
-	code := r.FormValue("bq-code")
 
 	// Get cached token from previous request
+	var cachedID, cachedSecret, cachedCode string
 	var cachedToken *oauth.Token
+	memcache.JSON.Get(c, dev_OAuthIDKey, &cachedID)
+	memcache.JSON.Get(c, dev_OAuthSecretKey, &cachedSecret)
+	memcache.JSON.Get(c, dev_OAuthCodeKey, &cachedCode)
 	memcache.JSON.Get(c, dev_OAuthTokenKey, &cachedToken)
 
 	// Set up a configuration.
-	config := &oauth.Config{
-		ClientId:     r.FormValue("bq-id"),
-		ClientSecret: r.FormValue("bq-secret"),
-		Scope:        bigquery.BigqueryScope,
-		RedirectURL:  "oob",
-		AuthURL:      "https://accounts.google.com/o/oauth2/auth",
-		TokenURL:     "https://accounts.google.com/o/oauth2/token",
-	}
-	if config.ClientId == "" || config.ClientSecret == "" { // No ID or Secret provided
-		return nil, errors.New("rtt: URL parameters 'bq-id' and 'bq-secret' required for oauth authentication to BigQuery.")
-	}
-	if code == "" && cachedToken == nil { // No Token provided and no token cached
-		askForOAuthCode(c, config)
-		return nil, errors.New("rtt: URL parameter 'bq-code' required for oauth authentication to BigQuery.")
+	if cachedID == "" || cachedSecret == "" || cachedCode == "" || cachedToken == nil {
+		c.Debugf("%v %v %v %v", cachedID, cachedSecret, cachedCode, cachedToken)
+		return nil, errors.New("rtt: Please visit /rtt/init to renew BigQuery OAuth authentication.")
 	}
 
 	var isOldToken bool
@@ -110,18 +147,13 @@ func bqLoginDev(r *http.Request) (*http.Client, error) {
 		}
 	}
 
-	transport := &oauth.Transport{
-		Config: config,
-		Transport: &urlfetch.Transport{
-			Context: c,
-		},
-	}
+	transport := getBQOAuthTransport(c, cachedID, cachedSecret)
 
 	if isOldToken || cachedToken == nil { // Token expired or no token cached
-		token, err := transport.Exchange(code)
+		token, err := transport.Exchange(cachedCode)
 		if err != nil {
 			c.Errorf("rtt: oauth.Transport.Exchange: %s", err)
-			askForOAuthCode(c, config)
+			c.Errorf("rtt: Please visit /rtt/init to renew BigQuery OAuth authentication.")
 			return nil, err
 		}
 		transport.Token = token
@@ -138,7 +170,19 @@ func bqLoginDev(r *http.Request) (*http.Client, error) {
 	return client, nil
 }
 
-func askForOAuthCode(c appengine.Context, config *oauth.Config) {
-	url := config.AuthCodeURL("")
-	c.Errorf("rtt: Visit this URL to get a code, then run again with URL parameter bq-code=YOUR_CODE\n%s\n", url)
+func getBQOAuthTransport(c appengine.Context, id, secret string) *oauth.Transport {
+	config := &oauth.Config{
+		ClientId:     id,
+		ClientSecret: secret,
+		Scope:        bigquery.BigqueryScope,
+		RedirectURL:  "oob",
+		AuthURL:      "https://accounts.google.com/o/oauth2/auth",
+		TokenURL:     "https://accounts.google.com/o/oauth2/token",
+	}
+	return &oauth.Transport{
+		Config: config,
+		Transport: &urlfetch.Transport{
+			Context: c,
+		},
+	}
 }
