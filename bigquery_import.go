@@ -157,6 +157,7 @@ func BQImportDay(r *http.Request, t time.Time) {
 	}
 	c.Debugf("rtt: BQImportDay.qText (%s): %s", dateStr, qText)
 
+	// Make first query to BigQuery
 	jobsService := bigquery.NewJobsService(service)
 	queryCall := jobsService.Query(BigQueryBillableProjectID, q)
 	response, err := queryCall.Do()
@@ -167,7 +168,7 @@ func BQImportDay(r *http.Request, t time.Time) {
 	c.Debugf("rtt: Received %d rows in query response (%d Total Rows).", len(response.Rows), response.TotalRows)
 	data := simplifyBQResponse(response.Rows)
 
-	// Request for more results in case results paginated.
+	// Cache certain details from response.
 	projID := response.JobReference.ProjectId
 	jobID := response.JobReference.JobId
 	pageToken := response.PageToken
@@ -175,21 +176,22 @@ func BQImportDay(r *http.Request, t time.Time) {
 	totalN := int(response.TotalRows)
 	response = nil
 
+	// Request for more results if not all results returned.
 	if n < totalN {
+		// Make further requests
 		getQueryResultsCall := jobsService.GetQueryResults(projID, jobID)
 		var respMore *bigquery.GetQueryResultsResponse
-		for n < totalN {
+		for n < totalN { // Make requests until total number of rows queried.
 			getQueryResultsCall.PageToken(pageToken)
 			respMore, err = getQueryResultsCall.Do()
 			if err != nil {
 				c.Errorf("rtt: BQImportDay.bigquery.JobsGetQueryResponseCall: %s", err)
 				return
 			}
-			pageToken = respMore.PageToken
-			data = append(data, simplifyBQResponse(respMore.Rows)...)
-			c.Debugf("rtt: Received additional %d rows in query response.", len(respMore.Rows))
+			pageToken = respMore.PageToken                            // Update pageToken to get next page.
+			data = append(data, simplifyBQResponse(respMore.Rows)...) // Add new data to existing data
 			n += len(respMore.Rows)
-			c.Debugf("rtt: %d rows received in total.", n)
+			c.Debugf("rtt: Received %d additional rows. (Total: %d rows)", len(respMore.Rows), n)
 		}
 	}
 
