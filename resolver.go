@@ -65,14 +65,14 @@ func RTTResolver(c appengine.Context, ip net.IP) (net.IP, error) {
 		return nil, err
 	}
 
-	if len(cg.SiteRTTs) > 0 {
-		siteID := cg.SiteRTTs[0].SiteID
+	for _, sr := range cg.SiteRTTs {
+		siteID := sr.SiteID
 		serverIP, err := PickRandomSliverFromSite(siteID)
-		return serverIP, err
-	} else {
-		return nil, ErrNotEnoughData
+		if err == nil {
+			return serverIP, nil
+		}
 	}
-	return nil, nil
+	return nil, ErrNotEnoughData
 }
 
 // PickRandomSliverFromSite returns a random Sliver's IP given a Site ID.
