@@ -33,6 +33,7 @@ const (
 	URLBQImportDaily          = "/rtt/import/daily"
 	URLBQImportAll            = "/rtt/import/all"
 	MaxDSWritePerQuery        = 500
+	MaxBQResponseRows         = 50000 //Response size must be less than 32MB
 	BigQueryBillableProjectID = "mlab-ns2"
 )
 
@@ -152,8 +153,9 @@ func BQImportDay(r *http.Request, t time.Time) {
 	// Construct query
 	qText := fmt.Sprintf(bqQueryFormat, tableName, startTime.Unix(), endTime.Unix())
 	q := &bigquery.QueryRequest{
-		Query:     qText,
-		TimeoutMs: 60000,
+		Query:      qText,
+		MaxResults: MaxBQResponseRows,
+		TimeoutMs:  60000,
 	}
 	c.Debugf("rtt: BQImportDay.qText (%s): %s", dateStr, qText)
 
@@ -184,6 +186,7 @@ func BQImportDay(r *http.Request, t time.Time) {
 		getQueryResultsCall := jobsService.GetQueryResults(projID, jobID)
 		var respMore *bigquery.GetQueryResultsResponse
 		for n < totalN { // Make requests until total number of rows queried.
+			getQueryResultsCall.MaxResults(MaxBQResponseRows)
 			getQueryResultsCall.PageToken(pageToken)
 			respMore, err = getQueryResultsCall.Do()
 			if err != nil {
