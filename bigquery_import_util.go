@@ -17,7 +17,6 @@
 package rtt
 
 import (
-	"appengine/datastore"
 	"code.google.com/p/google-api-go-client/bigquery/v2"
 	"net"
 	"strconv"
@@ -81,11 +80,4 @@ func simplifyBQResponse(rows []*bigquery.TableRow) bqRows {
 		data = append(data, newRow)
 	}
 	return data
-}
-
-// dsWriteChunk is a structure with which new ClientGroup lists can be split
-// into lengths <= MaxDSWritePerQuery such that datastore.PutMulti works.
-type dsWriteChunk struct {
-	Keys []*datastore.Key
-	CGs  []*ClientGroup
 }
