@@ -16,7 +16,7 @@
 package rtt
 
 import (
-	"fmt"
+	"errors"
 	"net"
 	"sort"
 )
@@ -27,8 +27,10 @@ const (
 )
 
 var (
-	v4PrefixMask = net.CIDRMask(v4PrefixSize, 8*net.IPv4len)
-	v6PrefixMask = net.CIDRMask(v6PrefixSize, 8*net.IPv6len)
+	v4PrefixMask        = net.CIDRMask(v4PrefixSize, 8*net.IPv4len)
+	v6PrefixMask        = net.CIDRMask(v6PrefixSize, 8*net.IPv6len)
+	ErrMergeSiteRTT     = errors.New("SiteRTT cannot be merged, mismatching Site IDs.")
+	ErrMergeClientGroup = errors.New("ClientGroups cannot be merged, mismatching ClientGroup Prefixes.")
 )
 
 // GetClientGroup returns a *net.IPNet which represents a subnet of prefix
@@ -51,7 +53,7 @@ func IsEqualClientGroup(a, b net.IP) bool {
 // entry has lower or equal RTT.
 func MergeSiteRTTs(oldSR, newSR *SiteRTT) (bool, error) {
 	if oldSR.SiteID != newSR.SiteID {
-		return false, fmt.Errorf("New SiteRTT for Site %s cannot be merged into Site %s SiteRTT", newSR.SiteID, oldSR.SiteID)
+		return false, ErrMergeSiteRTT
 	}
 	if newSR.RTT <= oldSR.RTT {
 		oldSR.RTT = newSR.RTT
@@ -67,7 +69,7 @@ func MergeSiteRTTs(oldSR, newSR *SiteRTT) (bool, error) {
 func MergeClientGroups(oldCG, newCG *ClientGroup) (bool, error) {
 	oIP, nIP := net.IP(oldCG.Prefix), net.IP(newCG.Prefix)
 	if !oIP.Equal(nIP) {
-		return false, fmt.Errorf("Old CG %s not equal to new CG %s. Cannot merge.", oIP, nIP)
+		return false, ErrMergeClientGroup
 	}
 
 	// Populate temporary maps to ease merge
