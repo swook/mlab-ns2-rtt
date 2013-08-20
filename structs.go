@@ -26,6 +26,8 @@ type ClientGroup struct {
 	SiteRTTs SiteRTTs
 }
 
+// NewClientGroup returns a new *ClientGroup with a Prefix set using a provided
+// IP.
 func NewClientGroup(ip net.IP) *ClientGroup {
 	return &ClientGroup{
 		Prefix:   []byte(ip),
