@@ -303,6 +303,27 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 	var merr appengine.MultiError
 	var err error
 
+	keysToPut := make([]*datastore.Key, 0, MaxDSWritePerQuery)
+	cgsToPut := make([]ClientGroup, 0, MaxDSWritePerQuery)
+	totalPutN := 0
+	processPutQueue := func() {
+		totalPutN += len(cgsToPut)
+		c.Debugf("rtt: Putting %v records into datastore. (Total %d rows)", len(cgsToPut), totalPutN)
+		_, err = datastore.PutMulti(c, keysToPut, cgsToPut)
+		if err != nil {
+			c.Errorf("rtt: bqMergeWithDatastore.datastore.PutMulti: %s", err)
+		}
+		keysToPut = make([]*datastore.Key, 0, MaxDSWritePerQuery)
+		cgsToPut = make([]ClientGroup, 0, MaxDSWritePerQuery)
+	}
+	queueToPut := func(idx int, keys []*datastore.Key) {
+		keysToPut = append(keysToPut, keys[idx])
+		cgsToPut = append(cgsToPut, oldCGs[idx])
+		if len(keysToPut) == MaxDSWritePerQuery {
+			processPutQueue()
+		}
+	}
+
 	for _, chunk := range chunks {
 		oldCGs = make([]ClientGroup, len(chunk.CGs))
 		err = datastore.GetMulti(c, chunk.Keys, oldCGs)
@@ -314,11 +335,19 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 				switch e {
 				case datastore.ErrNoSuchEntity: // New entry
 					oldCGs[i] = *chunk.CGs[i]
+					queueToPut(i, chunk.Keys)
 				case nil: // Entry exists, merge new data with old data
 					if oldCGs[i].SiteRTTs == nil {
 						oldCGs[i] = *chunk.CGs[i]
-					} else if err := MergeClientGroups(&oldCGs[i], chunk.CGs[i]); err != nil {
-						c.Errorf("rtt: bqMergeWithDatastore.MergeClientGroups: %s", err)
+						queueToPut(i, chunk.Keys)
+					} else {
+						changed, err := MergeClientGroups(&oldCGs[i], chunk.CGs[i])
+						if err != nil {
+							c.Errorf("rtt: bqMergeWithDatastore.MergeClientGroups: %s", err)
+						}
+						if changed {
+							queueToPut(i, chunk.Keys)
+						}
 					}
 				default: // Other unknown error
 					c.Errorf("rtt: bqMergeWithDatastore.datastore.GetMulti: %s", err)
@@ -326,18 +355,19 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 			}
 		case nil: // No errors, data exists so merge with old data
 			for i, _ := range oldCGs {
-				if err := MergeClientGroups(&oldCGs[i], chunk.CGs[i]); err != nil {
+				changed, err := MergeClientGroups(&oldCGs[i], chunk.CGs[i])
+				if err != nil {
 					c.Errorf("rtt: bqMergeWithDatastore.MergeClientGroups: %s", err)
+				}
+				if changed {
+					queueToPut(i, chunk.Keys)
 				}
 			}
 		default: // Other unknown errors from GetMulti
 			c.Errorf("rtt: bqMergeWithDatastore.datastore.GetMulti: %s", err)
 		}
-
-		// Put updated data set to datastore
-		_, err = datastore.PutMulti(c, chunk.Keys, oldCGs)
-		if err != nil {
-			c.Errorf("rtt: bqMergeWithDatastore.datastore.PutMulti: %s", err)
-		}
+	}
+	if len(keysToPut) > 0 {
+		processPutQueue()
 	}
 }
