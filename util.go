@@ -49,24 +49,25 @@ func IsEqualClientGroup(a, b net.IP) bool {
 
 // MergeSiteRTTs merges a new SiteRTT entry into an old SiteRTT entry if the new
 // entry has lower or equal RTT.
-func MergeSiteRTTs(oldSR, newSR *SiteRTT) error {
+func MergeSiteRTTs(oldSR, newSR *SiteRTT) (bool, error) {
 	if oldSR.SiteID != newSR.SiteID {
-		return fmt.Errorf("New SiteRTT for Site %s cannot be merged into Site %s SiteRTT", newSR.SiteID, oldSR.SiteID)
+		return false, fmt.Errorf("New SiteRTT for Site %s cannot be merged into Site %s SiteRTT", newSR.SiteID, oldSR.SiteID)
 	}
 	if newSR.RTT <= oldSR.RTT {
 		oldSR.RTT = newSR.RTT
 		oldSR.LastUpdated = newSR.LastUpdated
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 // MergeClientGroups merges a new list of SiteRTT with an existing list of
 // SiteRTT and sorts it in ascending RTT order. Used for merging new bigquery
 // data with existing datastore data.
-func MergeClientGroups(oldCG, newCG *ClientGroup) error {
+func MergeClientGroups(oldCG, newCG *ClientGroup) (bool, error) {
 	oIP, nIP := net.IP(oldCG.Prefix), net.IP(newCG.Prefix)
 	if !oIP.Equal(nIP) {
-		return fmt.Errorf("Old CG %s not equal to new CG %s. Cannot merge.", oIP, nIP)
+		return false, fmt.Errorf("Old CG %s not equal to new CG %s. Cannot merge.", oIP, nIP)
 	}
 
 	// Populate temporary maps to ease merge
@@ -81,13 +82,20 @@ func MergeClientGroups(oldCG, newCG *ClientGroup) error {
 
 	// Keep SiteRTT with lower RTT
 	var os *SiteRTT
-	var ok bool
+	var ok, changed, srChanged bool
+	var err error
 	for k, ns := range nRTTs {
 		os, ok = oRTTs[k]
 		if !ok {
 			oRTTs[k] = ns
 		} else {
-			MergeSiteRTTs(os, ns)
+			srChanged, err = MergeSiteRTTs(os, ns)
+			if err != nil {
+				return false, err
+			}
+			if srChanged {
+				changed = true
+			}
 		}
 	}
 
@@ -98,5 +106,5 @@ func MergeClientGroups(oldCG, newCG *ClientGroup) error {
 	}
 	sort.Sort(oldCG.SiteRTTs)
 
-	return nil
+	return changed, nil
 }
