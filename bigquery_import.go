@@ -168,7 +168,7 @@ func BQImportDay(r *http.Request, t time.Time) {
 		c.Errorf("rtt: BQImportDay.bigquery.JobsService.Query: %s", err)
 		return
 	}
-	c.Debugf("rtt: Received %d rows in query response (%d Total Rows).", len(response.Rows), response.TotalRows)
+	c.Debugf("rtt: Received %d rows in query response (Total: %d rows).", len(response.Rows), response.TotalRows)
 
 	data := make(map[string]*ClientGroup)
 	bqProcessQuery(c, response.Rows, data)
@@ -308,7 +308,7 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 	totalPutN := 0
 	processPutQueue := func() {
 		totalPutN += len(cgsToPut)
-		c.Debugf("rtt: Putting %v records into datastore. (Total %d rows)", len(cgsToPut), totalPutN)
+		c.Debugf("rtt: Putting %v records into datastore. (Total: %d rows)", len(cgsToPut), totalPutN)
 		_, err = datastore.PutMulti(c, keysToPut, cgsToPut)
 		if err != nil {
 			c.Errorf("rtt: bqMergeWithDatastore.datastore.PutMulti: %s", err)
