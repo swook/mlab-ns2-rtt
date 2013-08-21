@@ -1,0 +1,5 @@
+cron:
+- description: rtt. Daily import of BigQuery data
+  url: /rtt/import/daily
+  schedule: every 24 hours
+  target: rtt-import-daily

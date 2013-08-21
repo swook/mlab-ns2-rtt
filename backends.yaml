@@ -1,0 +1,5 @@
+backends:
+- name: rtt-import-daily
+  class: B4
+  start: _go_app
+  options: dynamic
