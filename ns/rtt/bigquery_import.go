@@ -173,7 +173,7 @@ func BQImportDay(r *http.Request, t time.Time) {
 	data := make(map[string]*ClientGroup)
 	bqProcessQuery(c, response.Rows, data)
 
-	// Cache certain details from response.
+	// Cache details from response to use in subsequent requests if any.
 	projID := response.JobReference.ProjectId
 	jobID := response.JobReference.JobId
 	pageToken := response.PageToken
@@ -186,17 +186,21 @@ func BQImportDay(r *http.Request, t time.Time) {
 		// Make further requests
 		getQueryResultsCall := jobsService.GetQueryResults(projID, jobID)
 		var respMore *bigquery.GetQueryResultsResponse
+
 		for n < totalN { // Make requests until total number of rows queried.
 			getQueryResultsCall.MaxResults(MaxBQResponseRows)
 			getQueryResultsCall.PageToken(pageToken)
+
 			respMore, err = getQueryResultsCall.Do()
 			if err != nil {
 				c.Errorf("rtt: BQImportDay.bigquery.JobsGetQueryResponseCall: %s", err)
 				return
 			}
 			pageToken = respMore.PageToken // Update pageToken to get next page.
+
 			n += len(respMore.Rows)
 			c.Debugf("rtt: Received %d additional rows. (Total: %d rows)", len(respMore.Rows), n)
+
 			bqProcessQuery(c, respMore.Rows, data)
 			respMore = nil
 		}
@@ -211,6 +215,8 @@ func BQImportDay(r *http.Request, t time.Time) {
 // BQImport and parses the response into data structures.
 // TODO(gavaletz): Evaluate whether this func could be split into smaller funcs.
 func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, data map[string]*ClientGroup) {
+	// Change interface and string values in table rows to what they should be:
+	// net.IP, time.Time, float64 (RTT).
 	rows := simplifyBQResponse(response)
 
 	var clientCGIP net.IP
@@ -221,17 +227,23 @@ func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, data map
 	var rttDataIdx int
 	var ok bool
 
+	// Slice of CGs which need to be sorted later on. This is because new
+	// entries are inserted into an existing map and not all entries need
+	// to be sorted.
 	CGsToSort := make([]*ClientGroup, 0, len(rows))
 
 	for _, row := range rows {
+		// Get Site ID from serverIP
 		site, ok = SliversDB[row.serverIP.String()]
 		if !ok {
 			c.Errorf("rtt: bqProcessQuery.getSiteWithIP: %s is not associated with any site", row.serverIP)
 			continue
 		}
 
+		// Get ClientGroup.Prefix from clientIP
 		clientCGIP = GetClientGroup(row.clientIP).IP
 		clientCGIPStr = clientCGIP.String()
+		// Create new ClientGroup if does not exist
 		clientCG, ok = data[clientCGIPStr]
 		if !ok {
 			clientCG = NewClientGroup(clientCGIP)
@@ -242,18 +254,21 @@ func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, data map
 		ok = false
 		for i, sitertt := range clientCG.SiteRTTs {
 			if sitertt.SiteID == site.ID {
+				// Found entry
 				rttDataIdx = i
 				rttData = sitertt
 				ok = true
 			}
 		}
 		if !ok {
+			// No existing entry, create new entry
 			rttDataIdx = len(clientCG.SiteRTTs)
 			rttData = SiteRTT{SiteID: site.ID}
 			clientCG.SiteRTTs = append(clientCG.SiteRTTs, rttData)
 		}
 
-		// If rtt data has not been recorded or if rtt is less than existing data's rtt.
+		// If rtt data has not been recorded or if new rtt is less than existing
+		// data's rtt, use new rtt data
 		if !ok || row.rtt <= rttData.RTT {
 			rttData.RTT = row.rtt
 			rttData.LastUpdated = row.lastUpdated
@@ -286,6 +301,7 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 	// operations to adhere with GAE limits.
 	chunks := make([]*dsReadChunk, 0)
 	var thisChunk *dsReadChunk
+	// newChunk creates a new dsReadChunk as necessary
 	newChunk := func() {
 		thisChunk = &dsReadChunk{
 			Keys: make([]*datastore.Key, 0, MaxDSReadPerQuery),
@@ -297,6 +313,8 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 	for cgStr, cg := range newCGs {
 		thisChunk.Keys = append(thisChunk.Keys, datastore.NewKey(c, "ClientGroup", cgStr, 0, rttKey))
 		thisChunk.CGs = append(thisChunk.CGs, cg)
+
+		// Make sure read chunks are only as large as MaxDSReadPerQuery
 		if len(thisChunk.CGs) == MaxDSReadPerQuery {
 			newChunk()
 		}
@@ -309,9 +327,15 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 	keysToPut := make([]*datastore.Key, 0, MaxDSWritePerQuery)
 	cgsToPut := make([]ClientGroup, 0, MaxDSWritePerQuery)
 	totalPutN := 0
+
+	// processPutQueue processes a queue of newly updated ClientGroups. This is
+	// done so that MaxDSWritePerQuery no. of Puts can be done to reduce the
+	// number of queries to datastore and therefore the time taken to Put all
+	// changes to datastore.
 	processPutQueue := func() {
 		totalPutN += len(cgsToPut)
 		c.Debugf("rtt: Putting %v records into datastore. (Total: %d rows)", len(cgsToPut), totalPutN)
+
 		_, err = datastore.PutMulti(c, keysToPut, cgsToPut)
 		if err != nil {
 			c.Errorf("rtt: bqMergeWithDatastore.datastore.PutMulti: %s", err)
@@ -319,18 +343,23 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 		keysToPut = make([]*datastore.Key, 0, MaxDSWritePerQuery)
 		cgsToPut = make([]ClientGroup, 0, MaxDSWritePerQuery)
 	}
+
+	// processPutQueue places a newly updated ClientGroup in a queue. This queue
+	// is later processed by processPutQueue.
 	queueToPut := func(idx int, keys []*datastore.Key) {
 		keysToPut = append(keysToPut, keys[idx])
 		cgsToPut = append(cgsToPut, oldCGs[idx])
+
+		// Write in MaxDSWritePerQuery chunks to adhere with GAE limits.
 		if len(keysToPut) == MaxDSWritePerQuery {
-			// Write in MaxDSWritePerQuery chunks to adhere with GAE limits.
 			processPutQueue()
 		}
 	}
 
+	// Process chunk by chunk
 	for _, chunk := range chunks {
 		oldCGs = make([]ClientGroup, len(chunk.CGs))
-		err = datastore.GetMulti(c, chunk.Keys, oldCGs)
+		err = datastore.GetMulti(c, chunk.Keys, oldCGs) // Get existing ClientGroup data
 
 		switch err.(type) {
 		case appengine.MultiError: // Multiple errors, deal with individually
@@ -341,6 +370,7 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 					oldCGs[i] = *chunk.CGs[i]
 					queueToPut(i, chunk.Keys)
 				case nil: // Entry exists, merge new data with old data
+					// If for some reason data is corrupted and nil is returned
 					if oldCGs[i].SiteRTTs == nil {
 						oldCGs[i] = *chunk.CGs[i]
 						queueToPut(i, chunk.Keys)
