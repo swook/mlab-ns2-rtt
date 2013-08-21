@@ -25,9 +25,11 @@ import (
 )
 
 var (
-	ErrNoMatchingSliverTool = errors.New("")
+	ErrNoMatchingSliverTool = errors.New("No matching SliverTool found.")
 )
 
+// GetSliverToolsWithToolID returns a list of SliverTools which run an M-Lab
+// tool with ID, toolID.
 func GetSliverToolsWithToolID(c appengine.Context, toolID string) ([]*SliverTool, error) {
 	q := datastore.NewQuery("SliverTool").Filter("tool_id =", toolID)
 	var slivers []*SliverTool
@@ -37,6 +39,8 @@ func GetSliverToolsWithToolID(c appengine.Context, toolID string) ([]*SliverTool
 	return slivers, nil
 }
 
+// GetRandomSliverToolWithToolID returns a randomly selected SliverTool from a
+// list of SliverTools which run an M-Lab tool with ID, toolID.
 func GetRandomSliverToolWithToolID(c appengine.Context, toolID string) (*SliverTool, error) {
 	slivers, err := GetSliverToolsWithToolID(c, toolID)
 	if err != nil {
@@ -46,6 +50,7 @@ func GetRandomSliverToolWithToolID(c appengine.Context, toolID string) (*SliverT
 	return slivers[idx], nil
 }
 
+// GetSiteWithSiteID returns a Site which matches a provided site ID.
 func GetSiteWithSiteID(c appengine.Context, siteID string) (*Site, error) {
 	q := datastore.NewQuery("Site").Filter("site_id =", siteID)
 	var site *Site
@@ -55,6 +60,7 @@ func GetSiteWithSiteID(c appengine.Context, siteID string) (*Site, error) {
 	return site, nil
 }
 
+// GetSliverToolWithIP returns a SliverTool which matches a provided IP.
 func GetSliverToolWithIP(c appengine.Context, toolID string, ip net.IP) (*SliverTool, error) {
 	slivers, err := GetSliverToolsWithToolID(c, toolID)
 	if err != nil {

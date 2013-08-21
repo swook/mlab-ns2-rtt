@@ -22,6 +22,8 @@ import (
 	"appengine/memcache"
 )
 
+// GetData returns a datastore.Get result and also caches the result into
+// memcache.
 func GetData(c appengine.Context, mcKey string, dsKey *datastore.Key, dst interface{}) error {
 	err := mcGet(c, mcKey, dst)
 	switch err {
@@ -37,6 +39,8 @@ func GetData(c appengine.Context, mcKey string, dsKey *datastore.Key, dst interf
 	return err
 }
 
+// QueryData returns a datastore.Query.GetAll result and also caches the result
+// into memcache.
 func QueryData(c appengine.Context, mcKey string, q *datastore.Query, dst interface{}) error {
 	err := mcGet(c, mcKey, dst)
 	switch err {
