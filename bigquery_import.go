@@ -1,5 +1,3 @@
-// +build appengine
-
 // Copyright 2013 M-Lab
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+// +build appengine
 
 package rtt
 
@@ -34,7 +34,7 @@ const (
 	URLBQImportAll            = "/rtt/import/all"
 	MaxDSReadPerQuery         = 1000
 	MaxDSWritePerQuery        = 500
-	MaxBQResponseRows         = 50000 //Response size must be less than 32MB
+	MaxBQResponseRows         = 50000 //Response size must be less than 32MB. 100k rows occasionally caused problems.
 	BigQueryBillableProjectID = "mlab-ns2"
 )
 
@@ -104,8 +104,8 @@ const bqQueryFormat = `SELECT
 		connection_spec.server_ip,
 		paris_traceroute_hop.dest_ip;`
 
-// bqInit logs in to bigquery using OAuth and returns a *bigquery.Service with
-// which to make queries to bigquery.
+// bqInit authenticates a transport using OAuth and returns a *bigquery.Service
+// with which to make queries to bigquery.
 // func bqInit(r *http.Request) (*bigquery.Service, error) {
 // 	c := appengine.NewContext(r)
 
@@ -237,7 +237,7 @@ func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, data map
 			data[clientCGIPStr] = clientCG
 		}
 
-		// Insert into SiteRTTs list
+		// Find SiteRTT entry or insert new one
 		ok = false
 		for i, sitertt := range clientCG.SiteRTTs {
 			if sitertt.SiteID == site.ID {
