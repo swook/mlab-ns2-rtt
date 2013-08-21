@@ -18,6 +18,8 @@ package rtt
 
 import (
 	"appengine"
+	"appengine/datastore"
+	"code.google.com/p/mlab-ns2/gae/ns/data"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -60,7 +62,12 @@ func RTTHandler(w http.ResponseWriter, r *http.Request) {
 
 // RTTResolver returns a Sliver from a Site with lowest RTT given a client's IP.
 func RTTResolver(c appengine.Context, ip net.IP) (net.IP, error) {
-	cg, err := DSGetClientGroup(c, ip)
+	cgIP := GetClientGroup(ip).IP
+	rttKey := datastore.NewKey(c, "string", "rtt", 0, nil)
+	key := datastore.NewKey(c, "ClientGroup", cgIP.String(), 0, rttKey)
+
+	var cg ClientGroup
+	err := data.GetData(c, mcClientGroupKey(c, cgIP), key, &cg)
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +80,12 @@ func RTTResolver(c appengine.Context, ip net.IP) (net.IP, error) {
 		}
 	}
 	return nil, ErrNotEnoughData
+}
+
+// mcClientGroupKey returns a key for use in memcache.
+func mcClientGroupKey(c appengine.Context, ip net.IP) string {
+	key := fmt.Sprintf("rtt:ClientGroup:%s", ip)
+	return key
 }
 
 // PickRandomSliverFromSite returns a random Sliver's IP given a Site ID.
