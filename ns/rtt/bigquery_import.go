@@ -221,7 +221,7 @@ func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, data map
 	var rttDataIdx int
 	var ok bool
 
-	CGsToSort := make(map[string]*ClientGroup)
+	CGsToSort := make([]*ClientGroup, 0, len(rows))
 
 	for _, row := range rows {
 		site, ok = SliversDB[row.serverIP.String()]
@@ -258,7 +258,7 @@ func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, data map
 			rttData.RTT = row.rtt
 			rttData.LastUpdated = row.lastUpdated
 			clientCG.SiteRTTs[rttDataIdx] = rttData
-			CGsToSort[clientCGIPStr] = clientCG
+			CGsToSort = append(CGsToSort, clientCG)
 		}
 	}
 
