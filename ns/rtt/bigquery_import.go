@@ -154,9 +154,10 @@ func BQImportDay(r *http.Request, t time.Time) {
 	// Construct query
 	qText := fmt.Sprintf(bqQueryFormat, tableName, startTime.Unix(), endTime.Unix())
 	q := &bigquery.QueryRequest{
-		Query:      qText,
-		MaxResults: MaxBQResponseRows,
-		TimeoutMs:  600000,
+		Query:         qText,
+		MaxResults:    MaxBQResponseRows,
+		TimeoutMs:     600000,
+		UseQueryCache: true,
 	}
 	c.Debugf("rtt: BQImportDay.qText (%s): %s", dateStr, qText)
 
