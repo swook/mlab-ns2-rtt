@@ -169,7 +169,7 @@ func BQImportDay(r *http.Request, t time.Time) {
 		c.Errorf("rtt: BQImportDay.bigquery.JobsService.Query: %s", err)
 		return
 	}
-	c.Debugf("rtt: Received %d rows in query response (Total: %d rows).", len(response.Rows), response.TotalRows)
+	c.Infof("rtt: Received %d rows in query response (Total: %d rows).", len(response.Rows), response.TotalRows)
 
 	data := make(map[string]*ClientGroup)
 	bqProcessQuery(c, response.Rows, data)
@@ -200,14 +200,14 @@ func BQImportDay(r *http.Request, t time.Time) {
 			pageToken = respMore.PageToken // Update pageToken to get next page.
 
 			n += len(respMore.Rows)
-			c.Debugf("rtt: Received %d additional rows. (Total: %d rows)", len(respMore.Rows), n)
+			c.Infof("rtt: Received %d additional rows. (Total: %d rows)", len(respMore.Rows), n)
 
 			bqProcessQuery(c, respMore.Rows, data)
 			respMore = nil
 		}
 	}
 
-	c.Debugf("rtt: Reduced %d rows to %d rows. Merging into datastore.", totalN, len(data))
+	c.Infof("rtt: Reduced %d rows to %d rows. Merging into datastore.", totalN, len(data))
 
 	bqMergeWithDatastore(c, data)
 }
@@ -296,8 +296,6 @@ type dsReadChunk struct {
 // TODO(gavaletz): Evaluate whether this func could be split into smaller funcs,
 // also consider whether it's fine to have 3 local funcs.
 func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
-	rttKey := datastore.NewKey(c, "string", "rtt", 0, nil)
-
 	// Divide GetMulti and PutMulti operations into MaxDSReadPerQuery sized
 	// operations to adhere with GAE limits.
 	chunks := make([]*dsReadChunk, 0)
@@ -311,6 +309,8 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 		chunks = append(chunks, thisChunk)
 	}
 	newChunk()
+
+	rttKey := datastore.NewKey(c, "string", "rtt", 0, nil)
 	for cgStr, cg := range newCGs {
 		thisChunk.Keys = append(thisChunk.Keys, datastore.NewKey(c, "ClientGroup", cgStr, 0, rttKey))
 		thisChunk.CGs = append(thisChunk.CGs, cg)
@@ -335,7 +335,7 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 	// changes to datastore.
 	processPutQueue := func() {
 		totalPutN += len(cgsToPut)
-		c.Debugf("rtt: Putting %v records into datastore. (Total: %d rows)", len(cgsToPut), totalPutN)
+		c.Infof("rtt: Putting %v records into datastore. (Total: %d rows)", len(cgsToPut), totalPutN)
 
 		_, err = datastore.PutMulti(c, keysToPut, cgsToPut)
 		if err != nil {
@@ -402,8 +402,11 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 			c.Errorf("rtt: bqMergeWithDatastore.datastore.GetMulti: %s", err)
 		}
 	}
+
 	// Process remaining Put operations.
 	if len(keysToPut) > 0 {
 		processPutQueue()
 	}
+
+	c.Infof("rtt: Completed merging in %d rows from BigQuery.", len(newCGs))
 }
