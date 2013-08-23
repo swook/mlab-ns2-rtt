@@ -92,6 +92,7 @@ func MergeClientGroups(oldCG, newCG *ClientGroup) (bool, error) {
 		os, ok = oRTTs[k]
 		if !ok {
 			oRTTs[k] = ns
+			changed = true
 		} else {
 			srChanged, err = MergeSiteRTTs(os, ns)
 			if err != nil {
