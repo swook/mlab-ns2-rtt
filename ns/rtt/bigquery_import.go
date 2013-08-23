@@ -156,7 +156,7 @@ func BQImportDay(r *http.Request, t time.Time) {
 	q := &bigquery.QueryRequest{
 		Query:      qText,
 		MaxResults: MaxBQResponseRows,
-		TimeoutMs:  60000,
+		TimeoutMs:  600000,
 	}
 	c.Debugf("rtt: BQImportDay.qText (%s): %s", dateStr, qText)
 
