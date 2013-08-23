@@ -67,11 +67,12 @@ func GetSliverToolWithIP(c appengine.Context, toolID string, ip net.IP) (*Sliver
 		return nil, err
 	}
 
+	ipStr := ip.String()
 	isIPv4 := ip.To4() != nil
 	for _, s := range slivers {
-		if isIPv4 && net.ParseIP(s.SliverIPv4).Equal(ip) {
+		if isIPv4 && s.SliverIPv4 == ipStr {
 			return s, nil
-		} else if !isIPv4 && net.ParseIP(s.SliverIPv6).Equal(ip) {
+		} else if !isIPv4 && s.SliverIPv6 == ipStr {
 			return s, nil
 		}
 	}
