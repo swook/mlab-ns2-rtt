@@ -19,8 +19,7 @@ import (
 	"time"
 )
 
-// ClientGroup contains an aggregation of RTT information by /v4PrefixSize or
-// /v6PrefixSize
+// ClientGroup contains RTT information aggregated by prefix size.
 type ClientGroup struct {
 	Prefix   []byte
 	SiteRTTs SiteRTTs
@@ -60,22 +59,4 @@ func (l SiteRTTs) Swap(i, j int) {
 // Len allows for the sorting of SiteRTTs in a *ClientGroup
 func (l SiteRTTs) Len() int {
 	return len(l)
-}
-
-// SitesDB stores a map of site IDs to *Sites.
-var SitesDB = make(map[string]*Site)
-
-// A Site contains a set of Slivers
-type Site struct {
-	ID      string
-	Slivers []*Sliver
-}
-
-// SliversDB stores a map of sliver IPs to *Sites.
-var SliversDB = make(map[string]*Site)
-
-// Sliver represents a server which runs within a parent Site
-type Sliver struct {
-	IP   net.IP
-	Site *Site
 }
