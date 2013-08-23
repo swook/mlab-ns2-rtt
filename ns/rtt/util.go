@@ -50,7 +50,8 @@ func IsEqualClientGroup(a, b net.IP) bool {
 }
 
 // MergeSiteRTTs merges a new SiteRTT entry into an old SiteRTT entry if the new
-// entry has lower or equal RTT.
+// entry has lower or equal RTT, and also reports whether the merge has caused
+// any changes.
 func MergeSiteRTTs(oldSR, newSR *SiteRTT) (bool, error) {
 	if oldSR.SiteID != newSR.SiteID {
 		return false, ErrMergeSiteRTT
@@ -64,8 +65,9 @@ func MergeSiteRTTs(oldSR, newSR *SiteRTT) (bool, error) {
 }
 
 // MergeClientGroups merges a new list of SiteRTT with an existing list of
-// SiteRTT and sorts it in ascending RTT order. Used for merging new bigquery
-// data with existing datastore data.
+// SiteRTT and sorts it in ascending RTT order. It also reports if the merge has
+// caused any changes.
+// Note: Used for merging new bigquery data with existing datastore data.
 func MergeClientGroups(oldCG, newCG *ClientGroup) (bool, error) {
 	oIP, nIP := net.IP(oldCG.Prefix), net.IP(newCG.Prefix)
 	if !oIP.Equal(nIP) {
