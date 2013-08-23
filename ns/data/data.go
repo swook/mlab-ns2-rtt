@@ -22,6 +22,7 @@ import (
 	"time"
 )
 
+//TODO: Data interface and Get,Put,Cache,Rm functions?
 //TODO: only index the columns that are needed
 //TODO: add json tags
 
@@ -30,14 +31,14 @@ type SliverTool struct {
 	SliceID                string    `datastore:"slice_id"`
 	SiteID                 string    `datastore:"site_id"`
 	ServerID               string    `datastore:"server_id"`
-	ServerPort             int64     `datastore:"server_port"`
-	HTTPPort               int64     `datastore:"http_port"` // For web-based tools, this is used to build the URL the client is redirected to: http://fqdn[ipv4|ipv6]:http_port
-	FQDN                   string    `datastore:"fqdn"`
-	SliverIPv4             []byte    `datastore:"sliver_ipv4"`
-	SliverIPv6             []byte    `datastore:"sliver_ipv6"`
-	StatusIPv4             bool      `datastore:"status_ipv4"`
-	StatusIPv6             bool      `datastore:"status_ipv6"`
-	UpdateRequestTimestamp time.Time `datastore:"update_request_timestamp"` // To avoid an additional lookup in the datastore
+	ServerPort             string    `datastore:"server_port"`
+	HTTPPort               string    `datastore:"http_port"`                // For web-based tools, this is used to build the URL the client is redirected to: http://fqdn[ipv4|ipv6]:http_port
+	FQDN                   string    `datastore:"fqdn"`                     // Unannotated fqdn. v4 and v6 versions can be built if necessary.
+	SliverIPv4             string    `datastore:"sliver_ipv4"`              // IP addresses. Can be 'off'
+	SliverIPv6             string    `datastore:"sliver_ipv6"`              // IP addresses. Can be 'off'
+	StatusIPv4             string    `datastore:"status_ipv4"`              // These can have the following values: online and offline.
+	StatusIPv6             string    `datastore:"status_ipv6"`              // These can have the following values: online and offline.
+	UpdateRequestTimestamp int64     `datastore:"update_request_timestamp"` // To avoid an additional lookup in the datastore
 	Latitude               float64   `datastore:"latitude"`                 // To avoid an additional lookup in the datastore
 	Longitude              float64   `datastore:"longitude"`                // To avoid an additional lookup in the datastore
 	City                   string    `datastore:"city"`                     // To avoid an additional lookup in the datastore
@@ -52,7 +53,7 @@ type Site struct {
 	Latitude              float64   `datastore:"latitude"`               // Latitude of the airport that uniquely identifies an M-Lab site.
 	Longitude             float64   `datastore:"longitude"`              // Longitude of the airport that uniquely identifies an M-Lab site.
 	Metro                 []string  `datastore:"metro"`                  // List of sites and metros, e.g., [ath, ath01].
-	RegistrationTimestamp time.Time `datastore:"registration_timestamp"` // Date representing the registration time (the first time a new site is added to mlab-ns).
+	RegistrationTimestamp int64     `datastore:"registration_timestamp"` // Date representing the registration time (the first time a new site is added to mlab-ns).
 	When                  time.Time `datastore:"when"`                   // Date representing the last modification time of this entity.
 }
 
@@ -115,7 +116,7 @@ type CountryCode struct {
 
 type EncryptionKey struct {
 	KeyID         string `datastore:"key_id"`         // Name of the key (by default is 'admin').
-	EncryptionKey []byte `datastore:"encryption_key"` // 16 bytes encryption key (AES).
+	EncryptionKey string `datastore:"encryption_key"` // 16 bytes encryption key (AES).
 }
 
 type Slice struct {
@@ -126,7 +127,7 @@ type Slice struct {
 type Tool struct {
 	SliceID  string `datastore:"slice_id"`
 	ToolID   string `datastore:"tool_id"`
-	HTTPPort int64  `datastore:"http_port"`
+	HTTPPort string `datastore:"http_port"`
 }
 
 //TODO(gavaletz): generalize this to credentials?
@@ -138,13 +139,13 @@ type Nagios struct {
 }
 
 type Ping struct {
-	Latitude      float64   `datastore:"latitude"`
-	Longitude     float64   `datastore:"longitude"`
-	ToolID        string    `datastore:"tool_id"`
-	AddressFamily string    `datastore:"address_family"`
-	Time          time.Time `datastore:"time"`
+	Latitude      float64 `datastore:"latitude"`
+	Longitude     float64 `datastore:"longitude"`
+	ToolID        string  `datastore:"tool_id"`
+	AddressFamily string  `datastore:"address_family"`
+	Time          float64 `datastore:"time"`
 }
 
-func GetSliverToolID(toolID, sliceID, serverID, siteID string) string {
+func GetSliverToolID(toolID, sliceID, serverID, siteID) string {
 	return fmt.Sprintf("%s-%s-%s-%s", toolID, sliceID, serverID, siteID)
 }
