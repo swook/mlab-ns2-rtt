@@ -66,15 +66,21 @@ func GetSliverToolWithIP(c appengine.Context, toolID string, ip net.IP) (*Sliver
 	if err != nil {
 		return nil, err
 	}
+
+	var isIPv4 bool
+	if ip.To4() != nil {
+		isIPv4 = true
+	}
+
 	for _, s := range slivers {
-		if ip.To4() == nil {
-			// ip is IPv6 address
-			if net.IP(s.SliverIPv6).Equal(ip) {
+		if isIPv4 {
+			// ip is IPv4 address
+			if net.IP(s.SliverIPv4).Equal(ip) {
 				return s, nil
 			}
 		} else {
-			// ip is IPv4 address
-			if net.IP(s.SliverIPv4).Equal(ip) {
+			// ip is IPv6 address
+			if net.IP(s.SliverIPv6).Equal(ip) {
 				return s, nil
 			}
 		}
