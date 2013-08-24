@@ -146,6 +146,6 @@ type Ping struct {
 	Time          float64 `datastore:"time"`
 }
 
-func GetSliverToolID(toolID, sliceID, serverID, siteID) string {
+func GetSliverToolID(toolID, sliceID, serverID, siteID string) string {
 	return fmt.Sprintf("%s-%s-%s-%s", toolID, sliceID, serverID, siteID)
 }
