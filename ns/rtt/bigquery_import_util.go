@@ -33,27 +33,6 @@ type bqRow struct {
 // IP string
 type bqRows []*bqRow
 
-func (r bqRows) Less(i, j int) bool {
-	ip1, ip2 := r[i].clientIP, r[j].clientIP
-	if len(ip1) < len(ip2) {
-		return true
-	}
-	for idx, v := range ip1 {
-		if v < ip2[idx] {
-			return true
-		}
-	}
-	return false
-}
-
-func (r bqRows) Swap(i, j int) {
-	r[i], r[j] = r[j], r[i]
-}
-
-func (r bqRows) Len() int {
-	return len(r)
-}
-
 func simplifyBQResponse(rows []*bigquery.TableRow) bqRows {
 	data := make(bqRows, 0, len(rows))
 
