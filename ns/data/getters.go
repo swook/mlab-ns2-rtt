@@ -50,22 +50,19 @@ func GetSliverToolsWithToolID(c appengine.Context, toolID string) ([]*SliverTool
 	return slivers, nil
 }
 
-// GetRandomOnlineSliverToolWithToolID returns a randomly selected SliverTool from a
-// list of SliverTools which run an M-Lab tool with ID, toolID.
-func GetRandomOnlineSliverToolWithToolID(c appengine.Context, toolID, siteID string) (*SliverTool, error) {
-	slivers, err := GetSliverToolsWithToolID(c, toolID)
-	if err != nil {
+// GetRandomSliverFromSite returns a randomly selected SliverTool from a list of
+// SliverTools which run an M-Lab tool with ID toolID on an M-Lab site with ID
+// siteID.
+func GetRandomSliverFromSite(c appengine.Context, toolID, siteID string) (*SliverTool, error) {
+	q := datastore.NewQuery("SliverTool").Filter("tool_id =", toolID).Filter("site_id =", siteID)
+	var slivers []*SliverTool
+	key := fmt.Sprintf("%s:%s", toolID, siteID)
+	if err := QueryData(c, key, q, slivers); err != nil {
 		return nil, err
 	}
-	slivers = FilterOnline(slivers)
-	siteslivers := make([]*SliverTool, 0, len(slivers))
-	for _, s := range slivers {
-		if s.SiteID == siteID {
-			siteslivers = append(siteslivers, s)
-		}
-	}
-	idx := rand.Int() % len(siteslivers)
-	return siteslivers[idx], nil
+	slivers = FilterOnline(slivers)  // Filter out offline slivers
+	idx := rand.Int() % len(slivers) // Get random index
+	return slivers[idx], nil
 }
 
 // GetSiteWithSiteID returns a Site which matches a provided site ID.

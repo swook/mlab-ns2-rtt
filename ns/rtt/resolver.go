@@ -91,7 +91,7 @@ func RTTResolver(c appengine.Context, toolID string, ip net.IP) (net.IP, error) 
 	var sliverTool *data.SliverTool
 	for _, sr := range cg.SiteRTTs {
 		siteID = sr.SiteID
-		sliverTool, err = data.GetRandomOnlineSliverToolWithToolID(c, toolID, siteID)
+		sliverTool, err = data.GetRandomSliverFromSite(c, toolID, siteID)
 		if err == nil {
 			return net.ParseIP(sliverTool.SliverIPv4), nil
 		}
