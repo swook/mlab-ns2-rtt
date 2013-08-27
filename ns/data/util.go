@@ -75,3 +75,13 @@ func mcSet(c appengine.Context, key string, data interface{}) error {
 	}
 	return nil
 }
+
+func FilterOnline(slivers []*SliverTool) []*SliverTool {
+	filtered := make([]*SliverTool, 0, len(slivers))
+	for _, s := range slivers {
+		if s.StatusIPv4 == SliverStatusOnline || s.StatusIPv6 == SliverStatusOnline {
+			filtered = append(filtered, s)
+		}
+	}
+	return filtered
+}

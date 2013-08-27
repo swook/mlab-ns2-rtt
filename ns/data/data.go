@@ -22,6 +22,11 @@ import (
 	"time"
 )
 
+const (
+	SliverStatusOnline  = "online"
+	SliverStatusOffline = "offline"
+)
+
 //TODO: Data interface and Get,Put,Cache,Rm functions?
 //TODO: only index the columns that are needed
 //TODO: add json tags

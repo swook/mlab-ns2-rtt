@@ -22,18 +22,21 @@ import (
 	"code.google.com/p/mlab-ns2/gae/ns/data"
 	"errors"
 	"fmt"
-	"math/rand"
 	"net"
 	"net/http"
+	"regexp"
 )
 
 const (
-	URLRTTMain = "/rtt"
+	URLRTTMain       = "/rtt/"
+	RTTToolIDPattern = "^/rtt/([^/]+)"
 )
 
 var (
-	ErrNotEnoughData = errors.New("rtt: The RTT resolver has insufficient data to respond to this query.")
-	ErrInvalidSiteID = errors.New("rtt: Invalid Site ID.")
+	ErrNoToolIDSpecified = errors.New("rtt: No Tool ID specified in request.")
+	ErrNotEnoughData     = errors.New("rtt: The RTT resolver has insufficient data to respond to this query.")
+	ErrInvalidSiteID     = errors.New("rtt: Invalid Site ID.")
+	RTTToolIDRegexp, _   = regexp.Compile(RTTToolIDPattern)
 )
 
 func init() {
@@ -45,13 +48,23 @@ func init() {
 func RTTHandler(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 
+	// Get IP to use as client IP.
 	ipStr := r.FormValue("ip")
 	if ipStr == "" {
 		ipStr = r.RemoteAddr
 	}
 	ip := net.ParseIP(ipStr)
 
-	resp, err := RTTResolver(c, ip)
+	// Get tool ID being queried for.
+	toolIDMatch := RTTToolIDRegexp.FindStringSubmatch(r.URL.Path)
+	if len(toolIDMatch) < 2 {
+		fmt.Fprintln(w, ErrNoToolIDSpecified)
+		return
+	}
+	toolID := toolIDMatch[1]
+
+	// Query RTT resolver.
+	resp, err := RTTResolver(c, toolID, ip)
 	if err != nil {
 		c.Errorf("rtt.RTTHandler: %s", err)
 		fmt.Fprintln(w, err)
@@ -61,24 +74,29 @@ func RTTHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // RTTResolver returns a Sliver from a Site with lowest RTT given a client's IP.
-func RTTResolver(c appengine.Context, ip net.IP) (net.IP, error) {
+func RTTResolver(c appengine.Context, toolID string, ip net.IP) (net.IP, error) {
 	cgIP := GetClientGroup(ip).IP
 	rttKey := datastore.NewKey(c, "string", "rtt", 0, nil)
 	key := datastore.NewKey(c, "ClientGroup", cgIP.String(), 0, rttKey)
 
+	// Get ClientGroup from datastore.
 	var cg ClientGroup
 	err := data.GetData(c, mcClientGroupKey(c, cgIP), key, &cg)
 	if err != nil {
 		return nil, err
 	}
 
+	// Get first error-less Site and a random SliverTool from selected Site.
+	var siteID string
+	var sliverTool *data.SliverTool
 	for _, sr := range cg.SiteRTTs {
-		siteID := sr.SiteID
-		serverIP, err := PickRandomSliverFromSite(siteID)
+		siteID = sr.SiteID
+		sliverTool, err = data.GetRandomOnlineSliverToolWithToolID(c, toolID, siteID)
 		if err == nil {
-			return serverIP, nil
+			return net.ParseIP(sliverTool.SliverIPv4), nil
 		}
 	}
+	// No valid Site found.
 	return nil, ErrNotEnoughData
 }
 
@@ -86,14 +104,4 @@ func RTTResolver(c appengine.Context, ip net.IP) (net.IP, error) {
 func mcClientGroupKey(c appengine.Context, ip net.IP) string {
 	key := fmt.Sprintf("rtt:ClientGroup:%s", ip)
 	return key
-}
-
-// PickRandomSliverFromSite returns a random Sliver's IP given a Site ID.
-func PickRandomSliverFromSite(siteID string) (net.IP, error) {
-	site, ok := SitesDB[siteID]
-	if !ok {
-		return nil, ErrInvalidSiteID
-	}
-	idx := rand.Int() % len(site.Slivers)
-	return site.Slivers[idx].IP, nil
 }

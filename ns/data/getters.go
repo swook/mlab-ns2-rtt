@@ -28,6 +28,16 @@ var (
 	ErrNoMatchingSliverTool = errors.New("No matching SliverTool found.")
 )
 
+// GetSliverTools returns a list of all SliverTools.
+func GetSliverTools(c appengine.Context) ([]*SliverTool, error) {
+	q := datastore.NewQuery("SliverTool")
+	var slivers []*SliverTool
+	if err := QueryData(c, "SliverTools", q, slivers); err != nil {
+		return nil, err
+	}
+	return slivers, nil
+}
+
 // GetSliverToolsWithToolID returns a list of SliverTools which run an M-Lab
 // tool with ID, toolID.
 func GetSliverToolsWithToolID(c appengine.Context, toolID string) ([]*SliverTool, error) {
@@ -39,15 +49,22 @@ func GetSliverToolsWithToolID(c appengine.Context, toolID string) ([]*SliverTool
 	return slivers, nil
 }
 
-// GetRandomSliverToolWithToolID returns a randomly selected SliverTool from a
+// GetRandomOnlineSliverToolWithToolID returns a randomly selected SliverTool from a
 // list of SliverTools which run an M-Lab tool with ID, toolID.
-func GetRandomSliverToolWithToolID(c appengine.Context, toolID string) (*SliverTool, error) {
+func GetRandomOnlineSliverToolWithToolID(c appengine.Context, toolID, siteID string) (*SliverTool, error) {
 	slivers, err := GetSliverToolsWithToolID(c, toolID)
 	if err != nil {
 		return nil, err
 	}
-	idx := rand.Int() % len(slivers)
-	return slivers[idx], nil
+	slivers = FilterOnline(slivers)
+	siteslivers := make([]*SliverTool, 0, len(slivers))
+	for _, s := range slivers {
+		if s.SiteID == siteID {
+			siteslivers = append(siteslivers, s)
+		}
+	}
+	idx := rand.Int() % len(siteslivers)
+	return siteslivers[idx], nil
 }
 
 // GetSiteWithSiteID returns a Site which matches a provided site ID.
@@ -61,8 +78,8 @@ func GetSiteWithSiteID(c appengine.Context, siteID string) (*Site, error) {
 }
 
 // GetSliverToolWithIP returns a SliverTool which matches a provided IP.
-func GetSliverToolWithIP(c appengine.Context, toolID string, ip net.IP) (*SliverTool, error) {
-	slivers, err := GetSliverToolsWithToolID(c, toolID)
+func GetSliverToolWithIP(c appengine.Context, ip net.IP) (*SliverTool, error) {
+	slivers, err := GetSliverTools(c)
 	if err != nil {
 		return nil, err
 	}

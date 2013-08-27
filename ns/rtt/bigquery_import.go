@@ -19,9 +19,10 @@ package rtt
 import (
 	"appengine"
 	"appengine/datastore"
-	// "appengine/urlfetch"
-	// "code.google.com/p/golog2bq/log2bq"
+	"appengine/urlfetch"
+	"code.google.com/p/golog2bq/log2bq"
 	"code.google.com/p/google-api-go-client/bigquery/v2"
+	"code.google.com/p/mlab-ns2/gae/ns/data"
 	"fmt"
 	"net"
 	"net/http"
@@ -106,29 +107,29 @@ const bqQueryFormat = `SELECT
 
 // bqInit authenticates a transport using OAuth and returns a *bigquery.Service
 // with which to make queries to bigquery.
-// func bqInit(r *http.Request) (*bigquery.Service, error) {
-// 	c := appengine.NewContext(r)
+func bqInit(r *http.Request) (*bigquery.Service, error) {
+	c := appengine.NewContext(r)
 
-// 	// Get transport from log2bq's utility function GAETransport
-// 	transport, err := log2bq.GAETransport(c, bigquery.BigqueryScope)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	// Get transport from log2bq's utility function GAETransport
+	transport, err := log2bq.GAETransport(c, bigquery.BigqueryScope)
+	if err != nil {
+		return nil, err
+	}
 
-// 	// Set maximum urlfetch request deadline
-// 	transport.Transport = &urlfetch.Transport{
-// 		Context:  c,
-// 		Deadline: 10 * time.Minute,
-// 	}
+	// Set maximum urlfetch request deadline
+	transport.Transport = &urlfetch.Transport{
+		Context:  c,
+		Deadline: 10 * time.Minute,
+	}
 
-// 	client, err := transport.Client()
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	client, err := transport.Client()
+	if err != nil {
+		return nil, err
+	}
 
-// 	service, err := bigquery.New(client)
-// 	return service, err
-// }
+	service, err := bigquery.New(client)
+	return service, err
+}
 
 const (
 	dateFormat = "2006-01-02"
@@ -215,7 +216,7 @@ func BQImportDay(r *http.Request, t time.Time) {
 // bqProcessQuery processes the output of the BigQuery query performed in
 // BQImport and parses the response into data structures.
 // TODO(gavaletz): Evaluate whether this func could be split into smaller funcs.
-func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, data map[string]*ClientGroup) {
+func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, newdata map[string]*ClientGroup) {
 	// Change interface and string values in table rows to what they should be:
 	// net.IP, time.Time, float64 (RTT).
 	rows := simplifyBQResponse(response)
@@ -223,10 +224,11 @@ func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, data map
 	var clientCGIP net.IP
 	var clientCGIPStr string
 	var clientCG *ClientGroup
-	var site *Site
+	var sliver *data.SliverTool
 	var rttData SiteRTT
 	var rttDataIdx int
 	var ok bool
+	var err error
 
 	// Slice of CGs which need to be sorted later on. This is because new
 	// entries are inserted into an existing map and not all entries need
@@ -235,9 +237,9 @@ func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, data map
 
 	for _, row := range rows {
 		// Get Site ID from serverIP
-		site, ok = SliversDB[row.serverIP.String()]
-		if !ok {
-			c.Errorf("rtt: bqProcessQuery.getSiteWithIP: %s is not associated with any site", row.serverIP)
+		sliver, err = data.GetSliverToolWithIP(c, row.serverIP)
+		if err != nil {
+			c.Errorf("rtt: bqProcessQuery.data.GetSliverToolWithIP: %s", err)
 			continue
 		}
 
@@ -245,16 +247,16 @@ func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, data map
 		clientCGIP = GetClientGroup(row.clientIP).IP
 		clientCGIPStr = clientCGIP.String()
 		// Create new ClientGroup if does not exist
-		clientCG, ok = data[clientCGIPStr]
+		clientCG, ok = newdata[clientCGIPStr]
 		if !ok {
 			clientCG = NewClientGroup(clientCGIP)
-			data[clientCGIPStr] = clientCG
+			newdata[clientCGIPStr] = clientCG
 		}
 
 		// Find SiteRTT entry or insert new one
 		ok = false
 		for i, sitertt := range clientCG.SiteRTTs {
-			if sitertt.SiteID == site.ID {
+			if sitertt.SiteID == sliver.SiteID {
 				// Found entry
 				rttDataIdx = i
 				rttData = sitertt
@@ -264,7 +266,7 @@ func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, data map
 		if !ok {
 			// No existing entry, create new entry
 			rttDataIdx = len(clientCG.SiteRTTs)
-			rttData = SiteRTT{SiteID: site.ID}
+			rttData = SiteRTT{SiteID: sliver.SiteID}
 			clientCG.SiteRTTs = append(clientCG.SiteRTTs, rttData)
 		}
 

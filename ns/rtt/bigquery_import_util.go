@@ -23,16 +23,20 @@ import (
 	"time"
 )
 
+// bqRow is an intermediate data structure used to make data from BigQuery more
+// accessible in the data processing and storing stage.
 type bqRow struct {
 	lastUpdated        time.Time
 	serverIP, clientIP net.IP
 	rtt                float64
 }
 
-// bqRows allows for the sorting of received BigQuery row data by client
-// IP string
+// bqRows is a list of bqRow
 type bqRows []*bqRow
 
+// simplifyBQResponse takes BigQuery response rows and converts the string
+// interface values into appropriate types. For example, rtt string is parsed
+// into float64.
 func simplifyBQResponse(rows []*bigquery.TableRow) bqRows {
 	data := make(bqRows, 0, len(rows))
 
