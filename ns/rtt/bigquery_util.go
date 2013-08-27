@@ -44,16 +44,20 @@ func simplifyBQResponse(rows []*bigquery.TableRow) bqRows {
 	data := make(bqRows, 0, len(rows))
 
 	var newRow *bqRow
-	var rtt float64
 	var lastUpdatedInt int64
 	var err error
 
 	for _, row := range rows {
-		newRow = &bqRow{
-			serverIP: net.ParseIP(row.F[1].V.(string)),
-			clientIP: net.ParseIP(row.F[2].V.(string)),
+		newRow = &bqRow{}
+		newRow.serverIP = net.ParseIP(row.F[1].V.(string))
+		if newRow.serverIP == nil {
+			continue
 		}
-		rtt, err = strconv.ParseFloat(row.F[3].V.(string), 64)
+		newRow.clientIP = net.ParseIP(row.F[2].V.(string))
+		if newRow.clientIP == nil {
+			continue
+		}
+		newRow.rtt, err = strconv.ParseFloat(row.F[3].V.(string), 64)
 		if err != nil {
 			continue
 		}
@@ -61,7 +65,6 @@ func simplifyBQResponse(rows []*bigquery.TableRow) bqRows {
 		if err != nil {
 			continue
 		}
-		newRow.rtt = rtt
 		newRow.lastUpdated = time.Unix(lastUpdatedInt, 0)
 		data = append(data, newRow)
 	}
