@@ -27,6 +27,7 @@ import (
 
 var (
 	ErrNoMatchingSliverTool = errors.New("No matching SliverTool found.")
+	ErrNoMatchingSite       = errors.New("No matching Site found.")
 )
 
 // GetSliverTools returns a list of all SliverTools.
@@ -67,12 +68,15 @@ func GetRandomSliverFromSite(c appengine.Context, toolID, siteID string) (*Slive
 
 // GetSiteWithSiteID returns a Site which matches a provided site ID.
 func GetSiteWithSiteID(c appengine.Context, siteID string) (*Site, error) {
-	k := datastore.NewKey(c, "Site", siteID, 0, nil)
-	var site *Site
-	if err := GetData(c, siteID, k, site); err != nil {
+	q := datastore.NewQuery("Site").Filter("site_id =", siteID)
+	var sites []*Site
+	if err := QueryData(c, siteID, q, sites); err != nil {
 		return nil, err
 	}
-	return site, nil
+	if len(sites) == 0 {
+		return nil, ErrNoMatchingSite
+	}
+	return sites[0], nil
 }
 
 // GetSliverToolWithIP returns a SliverTool which matches a provided IP.
