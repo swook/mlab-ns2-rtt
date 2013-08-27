@@ -23,6 +23,11 @@ import (
 	"time"
 )
 
+const (
+	dateFormat = "2006-01-02"
+	timeFormat = "2006-01-02 15:04:05"
+)
+
 // bqRow is an intermediate data structure used to make data from BigQuery more
 // accessible in the data processing and storing stage.
 type bqRow struct {

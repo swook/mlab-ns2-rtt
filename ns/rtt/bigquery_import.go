@@ -31,38 +31,11 @@ import (
 )
 
 const (
-	URLBQImportDaily          = "/rtt/import/daily"
-	URLBQImportAll            = "/rtt/import/all"
 	MaxDSReadPerQuery         = 1000
 	MaxDSWritePerQuery        = 500
 	MaxBQResponseRows         = 50000 //Response size must be less than 32MB. 100k rows occasionally caused problems.
 	BigQueryBillableProjectID = "mlab-ns2"
 )
-
-func init() {
-	http.HandleFunc(URLBQImportDaily, bqImportDaily)
-	http.HandleFunc(URLBQImportAll, bqImportAllTime)
-}
-
-// bqImportDaily is invoked as a daily cronjob to pull 2 day-old information
-// from BigQuery to update the RTT database
-func bqImportDaily(w http.ResponseWriter, r *http.Request) {
-	t := time.Now()
-	t = t.Add(time.Duration(-24 * 2 * time.Hour)) //Reduce time by 2 days
-	BQImportDay(r, t)
-}
-
-// bqImportAllTime imports all available BigQuery RTT data
-func bqImportAllTime(w http.ResponseWriter, r *http.Request) {
-	start := time.Unix(1371945577, 0) // First RTT data entry in BigQuery is unix time 1371945577
-	end := time.Now().Add(time.Duration(-24 * 2 * time.Hour))
-
-	// Add day until exceeds 2 days ago
-	day := time.Duration(24 * time.Hour)
-	for time := start; time.Before(end); time = time.Add(day) {
-		BQImportDay(r, time)
-	}
-}
 
 // bqQueryFormat is the query used to pull RTT data from the M-Lab BigQuery
 // dataset.
@@ -131,11 +104,6 @@ func bqInit(r *http.Request) (*bigquery.Service, error) {
 	return service, err
 }
 
-const (
-	dateFormat = "2006-01-02"
-	timeFormat = "2006-01-02 15:04:05"
-)
-
 // BQImportDay queries BigQuery for RTT data from a specific day and stores new
 // data into datastore
 func BQImportDay(r *http.Request, t time.Time) {
@@ -172,8 +140,8 @@ func BQImportDay(r *http.Request, t time.Time) {
 	}
 	c.Infof("rtt: Received %d rows in query response (Total: %d rows).", len(response.Rows), response.TotalRows)
 
-	data := make(map[string]*ClientGroup)
-	bqProcessQuery(c, response.Rows, data)
+	newCGs := make(map[string]*ClientGroup)
+	bqProcessQuery(c, response.Rows, newCGs)
 
 	// Cache details from response to use in subsequent requests if any.
 	projID := response.JobReference.ProjectId
@@ -203,20 +171,20 @@ func BQImportDay(r *http.Request, t time.Time) {
 			n += len(respMore.Rows)
 			c.Infof("rtt: Received %d additional rows. (Total: %d rows)", len(respMore.Rows), n)
 
-			bqProcessQuery(c, respMore.Rows, data)
+			bqProcessQuery(c, respMore.Rows, newCGs)
 			respMore = nil
 		}
 	}
 
-	c.Infof("rtt: Reduced %d rows to %d rows. Merging into datastore.", totalN, len(data))
+	c.Infof("rtt: Reduced %d rows to %d rows. Merging into datastore.", totalN, len(newCGs))
 
-	bqMergeWithDatastore(c, data)
+	bqMergeWithDatastore(c, newCGs)
 }
 
 // bqProcessQuery processes the output of the BigQuery query performed in
 // BQImport and parses the response into data structures.
 // TODO(gavaletz): Evaluate whether this func could be split into smaller funcs.
-func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, newdata map[string]*ClientGroup) {
+func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, newCGs map[string]*ClientGroup) {
 	// Change interface and string values in table rows to what they should be:
 	// net.IP, time.Time, float64 (RTT).
 	rows := simplifyBQResponse(response)
@@ -247,10 +215,10 @@ func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, newdata 
 		clientCGIP = GetClientGroup(row.clientIP).IP
 		clientCGIPStr = clientCGIP.String()
 		// Create new ClientGroup if does not exist
-		clientCG, ok = newdata[clientCGIPStr]
+		clientCG, ok = newCGs[clientCGIPStr]
 		if !ok {
 			clientCG = NewClientGroup(clientCGIP)
-			newdata[clientCGIPStr] = clientCG
+			newCGs[clientCGIPStr] = clientCG
 		}
 
 		// Find SiteRTT entry or insert new one
