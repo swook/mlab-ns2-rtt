@@ -20,7 +20,6 @@ import (
 	"appengine"
 	"appengine/datastore"
 	"errors"
-	"fmt"
 	"math/rand"
 	"net"
 )
@@ -55,15 +54,25 @@ func GetSliverToolsWithToolID(c appengine.Context, toolID string) ([]*SliverTool
 // SliverTools which run an M-Lab tool with ID toolID on an M-Lab site with ID
 // siteID.
 func GetRandomSliverFromSite(c appengine.Context, toolID, siteID string) (*SliverTool, error) {
-	q := datastore.NewQuery("SliverTool").Filter("tool_id =", toolID).Filter("site_id =", siteID)
-	var slivers []*SliverTool
-	key := fmt.Sprintf("%s:%s", toolID, siteID)
-	if err := QueryData(c, key, q, slivers); err != nil {
+	slivers, err := GetSliverToolsWithToolID(c, toolID)
+	if err != nil {
 		return nil, err
 	}
-	slivers = FilterOnline(slivers)  // Filter out offline slivers
-	idx := rand.Int() % len(slivers) // Get random index
-	return slivers[idx], nil
+
+	slivers = FilterOnline(slivers)                     // Filter out offline slivers
+	siteslivers := make([]*SliverTool, 0, len(slivers)) // Get Slivers of required Site ID
+	for _, s := range slivers {
+		if s.SiteID == siteID {
+			siteslivers = append(siteslivers, s)
+		}
+	}
+
+	if len(siteslivers) == 0 {
+		return nil, ErrNoMatchingSliverTool
+	}
+
+	idx := rand.Int() % len(siteslivers) // Get random index
+	return siteslivers[idx], nil
 }
 
 // GetSiteWithSiteID returns a Site which matches a provided site ID.
