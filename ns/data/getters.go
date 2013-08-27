@@ -20,6 +20,7 @@ import (
 	"appengine"
 	"appengine/datastore"
 	"errors"
+	"fmt"
 	"math/rand"
 	"net"
 )
@@ -69,9 +70,9 @@ func GetRandomOnlineSliverToolWithToolID(c appengine.Context, toolID, siteID str
 
 // GetSiteWithSiteID returns a Site which matches a provided site ID.
 func GetSiteWithSiteID(c appengine.Context, siteID string) (*Site, error) {
-	q := datastore.NewQuery("Site").Filter("site_id =", siteID)
+	k := datastore.NewKey(c, "Site", siteID, 0, nil)
 	var site *Site
-	if err := QueryData(c, siteID, q, site); err != nil {
+	if err := GetData(c, siteID, k, site); err != nil {
 		return nil, err
 	}
 	return site, nil
