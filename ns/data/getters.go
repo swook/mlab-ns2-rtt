@@ -50,9 +50,9 @@ func GetSliverToolsWithToolID(c appengine.Context, toolID string) ([]*SliverTool
 	return slivers, nil
 }
 
-// GetRandomSliverFromSite returns a randomly selected SliverTool from a list of
-// SliverTools which run an M-Lab tool with ID toolID on an M-Lab site with ID
-// siteID.
+// GetRandomSliverFromSite returns a randomly selected online SliverTool from a
+// list of SliverTools which run an M-Lab tool with ID toolID on an M-Lab site
+// with ID siteID.
 func GetRandomSliverFromSite(c appengine.Context, toolID, siteID string) (*SliverTool, error) {
 	slivers, err := GetSliverToolsWithToolID(c, toolID)
 	if err != nil {
@@ -89,6 +89,8 @@ func GetSiteWithSiteID(c appengine.Context, siteID string) (*Site, error) {
 }
 
 // GetSliverToolWithIP returns a SliverTool which matches a provided IP.
+// TODO(seon.wook): Make more efficient. Possibly create and memcache map of IPs
+// to *SliverTool.
 func GetSliverToolWithIP(c appengine.Context, ip net.IP) (*SliverTool, error) {
 	slivers, err := GetSliverTools(c)
 	if err != nil {
