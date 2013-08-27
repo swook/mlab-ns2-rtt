@@ -37,6 +37,14 @@ var simplifyBQResponseTests = []struct {
 				},
 			},
 			&bigquery.TableRow{
+				F: []*bigquery.TableCell{ // Row with defective data is ignored.
+					&bigquery.TableCell{interface{}("7.89")}, // Needs to be int
+					&bigquery.TableCell{interface{}("7.8.9.0")},
+					&bigquery.TableCell{interface{}("1.2.3.4")},
+					&bigquery.TableCell{interface{}("123")},
+				},
+			},
+			&bigquery.TableRow{
 				F: []*bigquery.TableCell{
 					&bigquery.TableCell{interface{}("456")},
 					&bigquery.TableCell{interface{}("9.0.1.2")},
