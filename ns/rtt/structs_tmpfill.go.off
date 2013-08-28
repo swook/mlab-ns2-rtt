@@ -16,11 +16,6 @@ package rtt
 
 import (
 	"net"
-	"net/http"
-)
-
-const (
-	URLBQInit = "/rtt/init"
 )
 
 // SitesDB stores a map of site IDs to *Sites.
@@ -43,15 +38,10 @@ type Sliver struct {
 
 // Stores list of slivers below into SitesDB accordingly.
 func init() {
-	http.HandleFunc(URLBQInit, bqinit)
 	for _, sliver := range Slivers {
 		sliver.Site.Slivers = append(sliver.Site.Slivers, sliver)
 		SliversDB[sliver.IP.String()] = sliver.Site
 	}
-}
-
-func bqinit(w http.ResponseWriter, r *http.Request) {
-	bqLoginDevPrepare(w, r)
 }
 
 // getSiteWithID gets a *Site from SitesDB with matching input site ID.
