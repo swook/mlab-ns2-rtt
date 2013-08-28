@@ -76,6 +76,8 @@ func mcSet(c appengine.Context, key string, data interface{}) error {
 	return nil
 }
 
+// FilterOnline takes a list of SliverTools and returns a list where offline
+// SliverTools are omitted.
 func FilterOnline(slivers []*SliverTool) []*SliverTool {
 	filtered := make([]*SliverTool, 0, len(slivers))
 	for _, s := range slivers {
