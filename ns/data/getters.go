@@ -33,7 +33,7 @@ var (
 func GetSliverTools(c appengine.Context) ([]*SliverTool, error) {
 	q := datastore.NewQuery("SliverTool")
 	var slivers []*SliverTool
-	if err := QueryData(c, "SliverTools", q, slivers); err != nil {
+	if err := QueryData(c, "SliverTools", q, &slivers); err != nil {
 		return nil, err
 	}
 	return slivers, nil
@@ -44,7 +44,7 @@ func GetSliverTools(c appengine.Context) ([]*SliverTool, error) {
 func GetSliverToolsWithToolID(c appengine.Context, toolID string) ([]*SliverTool, error) {
 	q := datastore.NewQuery("SliverTool").Filter("tool_id =", toolID)
 	var slivers []*SliverTool
-	if err := QueryData(c, toolID, q, slivers); err != nil {
+	if err := QueryData(c, toolID, q, &slivers); err != nil {
 		return nil, err
 	}
 	return slivers, nil
@@ -79,7 +79,7 @@ func GetRandomSliverFromSite(c appengine.Context, toolID, siteID string) (*Slive
 func GetSiteWithSiteID(c appengine.Context, siteID string) (*Site, error) {
 	q := datastore.NewQuery("Site").Filter("site_id =", siteID)
 	var sites []*Site
-	if err := QueryData(c, siteID, q, sites); err != nil {
+	if err := QueryData(c, siteID, q, &sites); err != nil {
 		return nil, err
 	}
 	if len(sites) == 0 {
