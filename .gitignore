@@ -22,4 +22,4 @@ _testmain.go
 *.exe
 
 # App Engine
-.datastore.db
+.*.db
