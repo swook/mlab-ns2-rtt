@@ -278,14 +278,16 @@ func bqMergeWithDatastore(c appengine.Context, newCGs map[string]*ClientGroup) {
 		}
 		chunks = append(chunks, thisChunk)
 	}
-	newChunk()
+	newChunk() // Create initial dsReadChunk
 
-	rttKey := datastore.NewKey(c, "string", "rtt", 0, nil)
+	rttKey := datastore.NewKey(c, "string", "rtt", 0, nil) // Parent key for ClientGroup entities
 	for cgStr, cg := range newCGs {
+		// Add into chunk
 		thisChunk.Keys = append(thisChunk.Keys, datastore.NewKey(c, "ClientGroup", cgStr, 0, rttKey))
 		thisChunk.CGs = append(thisChunk.CGs, cg)
 
-		// Make sure read chunks are only as large as MaxDSReadPerQuery
+		// Make sure read chunks are only as large as MaxDSReadPerQuery.
+		// Create new chunk if size reached.
 		if len(thisChunk.CGs) == MaxDSReadPerQuery {
 			newChunk()
 		}
