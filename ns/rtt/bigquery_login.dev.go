@@ -34,7 +34,16 @@ const (
 	dev_OAuthSecretKey = "dev_OAuthSecret"
 	dev_OAuthCodeKey   = "dev_OAuthCode"
 	dev_OAuthTokenKey  = "dev_OAuthToken" // The key used to memcache oauth2 tokens for the dev server
+	URLBQInit          = "/rtt/init"
 )
+
+func init() {
+	http.HandleFunc(URLBQInit, bqinit)
+}
+
+func bqinit(w http.ResponseWriter, r *http.Request) {
+	bqLoginDevPrepare(w, r)
+}
 
 // bqInit logs in to bigquery using OAuth and returns a *bigquery.Service with
 // which to make queries to bigquery.
