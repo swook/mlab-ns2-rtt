@@ -83,6 +83,9 @@ func RTTResolver(c appengine.Context, toolID string, ip net.IP) (net.IP, error) 
 	var cg ClientGroup
 	err := data.GetData(c, mcClientGroupKey(c, cgIP), key, &cg)
 	if err != nil {
+		if err == datastore.ErrNoSuchEntity {
+			return nil, ErrNotEnoughData
+		}
 		return nil, err
 	}
 
