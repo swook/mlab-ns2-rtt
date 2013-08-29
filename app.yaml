@@ -56,10 +56,6 @@ handlers:
 - url: /_ah/.*
   script: _go_app
 
-- url: /rtt/test/.*
-  script: _go_app
-  login: admin
-
 - url: /rtt/import/.*
   script: _go_app
   login: admin
