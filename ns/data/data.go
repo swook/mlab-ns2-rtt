@@ -50,14 +50,14 @@ type SliverTool struct {
 }
 
 type Site struct {
-	SiteID                string    `datastore:"site_id"`
-	City                  string    `datastore:"city"`
-	Country               string    `datastore:"country"`
-	Latitude              float64   `datastore:"latitude"`               // Latitude of the airport that uniquely identifies an M-Lab site.
-	Longitude             float64   `datastore:"longitude"`              // Longitude of the airport that uniquely identifies an M-Lab site.
-	Metro                 []string  `datastore:"metro"`                  // List of sites and metros, e.g., [ath, ath01].
-	RegistrationTimestamp int64     `datastore:"registration_timestamp"` // Date representing the registration time (the first time a new site is added to mlab-ns).
-	When                  time.Time `datastore:"when"`                   // Date representing the last modification time of this entity.
+	SiteID                string    `datastore:"site_id" json:"site"`
+	City                  string    `datastore:"city" json:"city"`
+	Country               string    `datastore:"country" json:"country"`
+	Latitude              float64   `datastore:"latitude" json:"latitude"`              // Latitude of the airport that uniquely identifies an M-Lab site.
+	Longitude             float64   `datastore:"longitude" json:"longitude"`            // Longitude of the airport that uniquely identifies an M-Lab site.
+	Metro                 []string  `datastore:"metro" json:"metro"`                    // List of sites and metros, e.g., [ath, ath01].
+	RegistrationTimestamp int64     `datastore:"registration_timestamp" json:"created"` // Date representing the registration time (the first time a new site is added to mlab-ns).
+	When                  time.Time `datastore:"when" json:"-"`                         // Date representing the last modification time of this entity.
 }
 
 // MMLocation is a format that comes from pre-processed geolocation data.  It is
