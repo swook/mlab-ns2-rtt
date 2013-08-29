@@ -16,7 +16,9 @@ package rtt
 
 import (
 	"code.google.com/p/google-api-go-client/bigquery/v2"
+	"code.google.com/p/mlab-ns2/gae/ns/data"
 	"net"
+	"sort"
 	"strconv"
 	"time"
 )
@@ -69,4 +71,93 @@ func simplifyBQResponse(rows []*bigquery.TableRow) bqRows {
 		data = append(data, newRow)
 	}
 	return data
+}
+
+// makeMapIPStrToSiteID creates a map of IP string to Site ID from SliverTools
+// data from datastore.
+func makeMapIPStrToSiteID(slivers []*data.SliverTool) map[string]string {
+	var ipToSliver map[string]string
+	ipToSliver = make(map[string]string)
+	for _, s := range slivers {
+		if s.SliverIPv4 != "" {
+			ipToSliver[s.SliverIPv4] = s.SiteID
+		}
+		if s.SliverIPv6 != "" {
+			ipToSliver[s.SliverIPv6] = s.SiteID
+		}
+	}
+	return ipToSliver
+}
+
+// bqMergeIntoClientGroups merges new rows of data into an existing map of
+// ClientGroup IP string to *ClientGroup. This involves the merging of new
+// SiteRTTs with existing SiteRTTs, and the sorting of SiteRTTs to be in
+// ascending RTT order.
+func bqMergeIntoClientGroups(rows bqRows, sliverIPMap map[string]string, newCGs map[string]*ClientGroup) {
+	var clientCGIP net.IP
+	var clientCGIPStr string
+	var clientCG *ClientGroup
+	var siteID string
+	var oldSR, newSR SiteRTT
+	var oldSRIdx int
+	var err error
+	var changed, ok bool
+
+	// Slice of CGs which need to be sorted later on. This is because new
+	// entries are inserted into an existing map and not all entries need
+	// to be sorted.
+	CGsToSort := make([]*ClientGroup, 0, len(rows))
+
+	for _, row := range rows {
+		// Get Site ID from serverIP
+		siteID, ok = sliverIPMap[row.serverIP.String()]
+		if !ok {
+			continue
+		}
+
+		// Get ClientGroup.Prefix from clientIP
+		clientCGIP = GetClientGroup(row.clientIP).IP
+		clientCGIPStr = clientCGIP.String()
+		// Create new ClientGroup if does not exist
+		clientCG, ok = newCGs[clientCGIPStr]
+		if !ok {
+			clientCG = NewClientGroup(clientCGIP)
+			newCGs[clientCGIPStr] = clientCG
+		}
+
+		// Find SiteRTT entry or insert new one
+		ok = false
+		for i, sitertt := range clientCG.SiteRTTs {
+			if sitertt.SiteID == siteID {
+				// Found entry
+				oldSRIdx = i
+				oldSR = sitertt
+				ok = true
+			}
+		}
+
+		newSR = SiteRTT{siteID, row.rtt, row.lastUpdated}
+		if !ok {
+			// No existing entry, create new entry
+			clientCG.SiteRTTs = append(clientCG.SiteRTTs, newSR)
+			changed = true
+		} else {
+			// Entry exists, merge with old entry
+			changed, err = MergeSiteRTTs(&oldSR, &newSR)
+			if err != nil {
+				continue
+			}
+			if changed {
+				clientCG.SiteRTTs[oldSRIdx] = oldSR
+			}
+		}
+		if changed { // If existing SiteRTTs changed or updated
+			CGsToSort = append(CGsToSort, clientCG)
+		}
+	}
+
+	// Sort ClientGroups' SiteRTTs in ascending RTT order
+	for _, cg := range CGsToSort {
+		sort.Sort(cg.SiteRTTs)
+	}
 }

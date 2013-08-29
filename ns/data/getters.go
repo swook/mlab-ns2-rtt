@@ -21,7 +21,6 @@ import (
 	"appengine/datastore"
 	"errors"
 	"math/rand"
-	"net"
 )
 
 var (
@@ -86,25 +85,4 @@ func GetSiteWithSiteID(c appengine.Context, siteID string) (*Site, error) {
 		return nil, ErrNoMatchingSite
 	}
 	return sites[0], nil
-}
-
-// GetSliverToolWithIP returns a SliverTool which matches a provided IP.
-// TODO(seon.wook): Make more efficient. Possibly create and memcache map of IPs
-// to *SliverTool.
-func GetSliverToolWithIP(c appengine.Context, ip net.IP) (*SliverTool, error) {
-	slivers, err := GetSliverTools(c)
-	if err != nil {
-		return nil, err
-	}
-
-	ipStr := ip.String()
-	isIPv4 := ip.To4() != nil
-	for _, s := range slivers {
-		if isIPv4 && s.SliverIPv4 == ipStr {
-			return s, nil
-		} else if !isIPv4 && s.SliverIPv6 == ipStr {
-			return s, nil
-		}
-	}
-	return nil, ErrNoMatchingSliverTool
 }

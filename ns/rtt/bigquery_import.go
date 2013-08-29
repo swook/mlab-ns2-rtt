@@ -24,9 +24,7 @@ import (
 	"code.google.com/p/google-api-go-client/bigquery/v2"
 	"code.google.com/p/mlab-ns2/gae/ns/data"
 	"fmt"
-	"net"
 	"net/http"
-	"sort"
 	"time"
 )
 
@@ -141,7 +139,13 @@ func BQImportDay(r *http.Request, t time.Time) {
 	c.Infof("rtt: Received %d rows in query response (Total: %d rows).", len(response.Rows), response.TotalRows)
 
 	newCGs := make(map[string]*ClientGroup)
-	bqProcessQuery(c, response.Rows, newCGs)
+	sliverTools, err := data.GetSliverTools(c)
+	if err != nil {
+		c.Errorf("rtt: BQImportDay.data.GetSliverTools: %s", err)
+	}
+	sliverIPMap := makeMapIPStrToSiteID(sliverTools)
+	sliverTools = nil
+	bqProcessQuery(response.Rows, sliverIPMap, newCGs)
 
 	// Cache details from response to use in subsequent requests if any.
 	projID := response.JobReference.ProjectId
@@ -171,7 +175,7 @@ func BQImportDay(r *http.Request, t time.Time) {
 			n += len(respMore.Rows)
 			c.Infof("rtt: Received %d additional rows. (Total: %d rows)", len(respMore.Rows), n)
 
-			bqProcessQuery(c, respMore.Rows, newCGs)
+			bqProcessQuery(respMore.Rows, sliverIPMap, newCGs)
 			respMore = nil
 		}
 	}
@@ -183,75 +187,9 @@ func BQImportDay(r *http.Request, t time.Time) {
 
 // bqProcessQuery processes the output of the BigQuery query performed in
 // BQImport and parses the response into data structures.
-// TODO(gavaletz): Evaluate whether this func could be split into smaller funcs.
-func bqProcessQuery(c appengine.Context, response []*bigquery.TableRow, newCGs map[string]*ClientGroup) {
-	// Change interface and string values in table rows to what they should be:
-	// net.IP, time.Time, float64 (RTT).
-	rows := simplifyBQResponse(response)
-
-	var clientCGIP net.IP
-	var clientCGIPStr string
-	var clientCG *ClientGroup
-	var sliver *data.SliverTool
-	var rttData SiteRTT
-	var rttDataIdx int
-	var ok bool
-	var err error
-
-	// Slice of CGs which need to be sorted later on. This is because new
-	// entries are inserted into an existing map and not all entries need
-	// to be sorted.
-	CGsToSort := make([]*ClientGroup, 0, len(rows))
-
-	for _, row := range rows {
-		// Get Site ID from serverIP
-		sliver, err = data.GetSliverToolWithIP(c, row.serverIP)
-		if err != nil {
-			c.Errorf("rtt: bqProcessQuery.data.GetSliverToolWithIP: %s", err)
-			continue
-		}
-
-		// Get ClientGroup.Prefix from clientIP
-		clientCGIP = GetClientGroup(row.clientIP).IP
-		clientCGIPStr = clientCGIP.String()
-		// Create new ClientGroup if does not exist
-		clientCG, ok = newCGs[clientCGIPStr]
-		if !ok {
-			clientCG = NewClientGroup(clientCGIP)
-			newCGs[clientCGIPStr] = clientCG
-		}
-
-		// Find SiteRTT entry or insert new one
-		ok = false
-		for i, sitertt := range clientCG.SiteRTTs {
-			if sitertt.SiteID == sliver.SiteID {
-				// Found entry
-				rttDataIdx = i
-				rttData = sitertt
-				ok = true
-			}
-		}
-		if !ok {
-			// No existing entry, create new entry
-			rttDataIdx = len(clientCG.SiteRTTs)
-			rttData = SiteRTT{SiteID: sliver.SiteID}
-			clientCG.SiteRTTs = append(clientCG.SiteRTTs, rttData)
-		}
-
-		// If rtt data has not been recorded or if new rtt is less than existing
-		// data's rtt, use new rtt data
-		if !ok || row.rtt <= rttData.RTT {
-			rttData.RTT = row.rtt
-			rttData.LastUpdated = row.lastUpdated
-			clientCG.SiteRTTs[rttDataIdx] = rttData
-			CGsToSort = append(CGsToSort, clientCG)
-		}
-	}
-
-	// Sort ClientGroups' SiteRTTs in ascending RTT order
-	for _, cg := range CGsToSort {
-		sort.Sort(cg.SiteRTTs)
-	}
+func bqProcessQuery(resp []*bigquery.TableRow, sliverIPMap map[string]string, newCGs map[string]*ClientGroup) {
+	rows := simplifyBQResponse(resp)
+	bqMergeIntoClientGroups(rows, sliverIPMap, newCGs)
 }
 
 // dsWriteChunk is a structure with which new ClientGroup lists can be split
