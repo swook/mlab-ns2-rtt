@@ -78,29 +78,29 @@ const bqQueryFormat = `SELECT
 
 // bqInit authenticates a transport using OAuth and returns a *bigquery.Service
 // with which to make queries to bigquery.
-// func bqInit(r *http.Request) (*bigquery.Service, error) {
-// 	c := appengine.NewContext(r)
+func bqInit(r *http.Request) (*bigquery.Service, error) {
+	c := appengine.NewContext(r)
 
-// 	// Get transport from log2bq's utility function GAETransport
-// 	transport, err := log2bq.GAETransport(c, bigquery.BigqueryScope)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	// Get transport from log2bq's utility function GAETransport
+	transport, err := log2bq.GAETransport(c, bigquery.BigqueryScope)
+	if err != nil {
+		return nil, err
+	}
 
-// 	// Set maximum urlfetch request deadline
-// 	transport.Transport = &urlfetch.Transport{
-// 		Context:  c,
-// 		Deadline: 10 * time.Minute,
-// 	}
+	// Set maximum urlfetch request deadline
+	transport.Transport = &urlfetch.Transport{
+		Context:  c,
+		Deadline: 10 * time.Minute,
+	}
 
-// 	client, err := transport.Client()
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	client, err := transport.Client()
+	if err != nil {
+		return nil, err
+	}
 
-// 	service, err := bigquery.New(client)
-// 	return service, err
-// }
+	service, err := bigquery.New(client)
+	return service, err
+}
 
 // BQImportDay queries BigQuery for RTT data from a specific day and stores new
 // data into datastore
