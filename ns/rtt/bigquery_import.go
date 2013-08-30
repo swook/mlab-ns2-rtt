@@ -19,8 +19,8 @@ package rtt
 import (
 	"appengine"
 	"appengine/datastore"
-	// "appengine/urlfetch"
-	// "code.google.com/p/golog2bq/log2bq"
+	"appengine/urlfetch"
+	"code.google.com/p/golog2bq/log2bq"
 	"code.google.com/p/google-api-go-client/bigquery/v2"
 	"code.google.com/p/mlab-ns2/gae/ns/data"
 	"fmt"
