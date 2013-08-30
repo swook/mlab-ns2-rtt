@@ -35,7 +35,6 @@ const (
 var (
 	ErrNoToolIDSpecified = errors.New("rtt: No Tool ID specified in request.")
 	ErrNotEnoughData     = errors.New("rtt: The RTT resolver has insufficient data to respond to this query.")
-	ErrInvalidSiteID     = errors.New("rtt: Invalid Site ID.")
 	RTTToolIDRegexp, _   = regexp.Compile(RTTToolIDPattern)
 )
 
