@@ -15,6 +15,7 @@
 package rtt
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"reflect"
@@ -178,4 +179,21 @@ func TestMergeClientGroups(t *testing.T) {
 			t.Fatalf("MergeClientGroups(%s, %v) = %v, %v, want %v, %v", newCGStr, tt.newIn, tt.oldIn, ok, tt.out, tt.changed)
 		}
 	}
+}
+
+func RetryWithExpDelayTestFunc(n int) error {
+	if n < 6 {
+		return errors.New("Error")
+	}
+	return nil
+}
+
+func TestRetryWithExpDelay(t *testing.T) {
+	i := 0
+	RetryWithExpDelay(func() error {
+		i++
+		return RetryWithExpDelayTestFunc(i)
+	}, func(str string, v ...interface{}) {
+		fmt.Printf(str, v...)
+	}, "TestRetryWithExpDelay", 0)
 }

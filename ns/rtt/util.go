@@ -19,6 +19,7 @@ import (
 	"errors"
 	"net"
 	"sort"
+	"time"
 )
 
 const (
@@ -112,4 +113,36 @@ func MergeClientGroups(oldCG, newCG *ClientGroup) (bool, error) {
 	sort.Sort(oldCG.SiteRTTs)
 
 	return changed, nil
+}
+
+// RetryWithExpDelay repeats the calling of a function f with an exponentially
+// increasing delay starting from 2 seconds and doubling per iteration.
+//
+// The input function f can be provided by using a closure such as:
+//	func() error {
+//		ActualFunction(localVariables)
+//	}
+//
+// A logging function can be provided in the following way for App Engine:
+//	retryWithExpDelay(f, c.Infof, "BQImport", 0)
+//
+// while for other usage, a closure can be passed:
+//	retryWithExpDelay(f, func(str string, v ...interface{}) {
+//		fmt.Printf(str, v...)
+//	}, "BQImport", 0)
+// Note: func signature for fmt.Printf is func(string, ...interface{}) (int, error)
+//
+func RetryWithExpDelay(f func() error, logf func(string, ...interface{}), jobName string, delay int) {
+	if delay > 0 {
+		<-time.After(time.Duration(int64(delay) * int64(time.Second)))
+	} else {
+		delay = 1
+	}
+	err := f()
+	if err != nil {
+		delay *= 2
+		logf("%s: Retrying after %d seconds.\n", jobName, delay)
+		RetryWithExpDelay(f, logf, jobName, delay)
+	}
+	return
 }
