@@ -19,7 +19,7 @@ You can specify an entity type with:
 
     appcfg.py download_data --application=s~mlab-ns2 --url=http://mlab-ns2.appspot.com/_ah/remote_api --filename=.deployed_datastore.db --kind=Site
 
-This command will fail is the target file `.deployed_datastore.db` exists. Run `rm .deployed_datastore.db` in that case.
+This command will fail if the target file `.deployed_datastore.db` exists. Run `rm .deployed_datastore.db` in that case.
 
 Upload data to local dev server
 -------------------------------
