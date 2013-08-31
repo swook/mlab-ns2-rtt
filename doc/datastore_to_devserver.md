@@ -32,6 +32,10 @@ Upload data to local dev server
 
 Overwrite all files.
 
+Run the dev server using the following command or similar in the app's directory:
+
+    dev_appserver.py --port 8080 --datastore_path=./.datastore.db .
+
 Now run the following command:
 
     appcfg.py upload_data --url=http://localhost:8080/_ah/remote_api --filename=.deployed_datastore.db
