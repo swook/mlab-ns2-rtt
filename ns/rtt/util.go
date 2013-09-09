@@ -19,7 +19,6 @@ import (
 	"errors"
 	"net"
 	"sort"
-	"time"
 )
 
 const (
