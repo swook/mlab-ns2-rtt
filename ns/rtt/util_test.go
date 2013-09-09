@@ -180,20 +180,3 @@ func TestMergeClientGroups(t *testing.T) {
 		}
 	}
 }
-
-func RetryWithExpDelayTestFunc(n int) error {
-	if n < 6 {
-		return errors.New("Error")
-	}
-	return nil
-}
-
-func TestRetryWithExpDelay(t *testing.T) {
-	i := 0
-	RetryWithExpDelay(func() error {
-		i++
-		return RetryWithExpDelayTestFunc(i)
-	}, func(str string, v ...interface{}) {
-		fmt.Printf(str, v...)
-	}, "TestRetryWithExpDelay", 0)
-}
