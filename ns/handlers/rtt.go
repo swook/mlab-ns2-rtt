@@ -14,12 +14,13 @@
 
 // +build appengine
 
-package rtt
+package handlers
 
 import (
 	"appengine"
 	"appengine/datastore"
 	"code.google.com/p/mlab-ns2/gae/ns/data"
+	"code.google.com/p/mlab-ns2/gae/ns/rtt"
 	"errors"
 	"fmt"
 	"net"
@@ -74,13 +75,13 @@ func RTTHandler(w http.ResponseWriter, r *http.Request) {
 
 // RTTResolver returns a Sliver from a Site with lowest RTT given a client's IP.
 func RTTResolver(c appengine.Context, toolID string, ip net.IP) (net.IP, error) {
-	cgIP := GetClientGroup(ip).IP
+	cgIP := rtt.GetClientGroup(ip).IP
 	rttKey := datastore.NewKey(c, "string", "rtt", 0, nil)
 	key := datastore.NewKey(c, "ClientGroup", cgIP.String(), 0, rttKey)
 
 	// Get ClientGroup from datastore.
-	var cg ClientGroup
-	err := data.GetData(c, mcClientGroupKey(c, cgIP), key, &cg)
+	var cg rtt.ClientGroup
+	err := data.GetData(c, data.MCKey_ClientGroup(cgIP), key, &cg)
 	if err != nil {
 		if err == datastore.ErrNoSuchEntity {
 			return nil, ErrNotEnoughData
@@ -100,10 +101,4 @@ func RTTResolver(c appengine.Context, toolID string, ip net.IP) (net.IP, error) 
 	}
 	// No valid Site found.
 	return nil, ErrNotEnoughData
-}
-
-// mcClientGroupKey returns a key for use in memcache.
-func mcClientGroupKey(c appengine.Context, ip net.IP) string {
-	key := fmt.Sprintf("rtt:ClientGroup:%s", ip)
-	return key
 }
