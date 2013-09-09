@@ -76,9 +76,10 @@ func simplifyBQResponse(rows []*bigquery.TableRow) bqRows {
 // makeMapIPStrToSiteID creates a map of IP string to Site ID from SliverTools
 // data from datastore.
 func makeMapIPStrToSiteID(slivers []*data.SliverTool) map[string]string {
-	var ipToSliver map[string]string
-	ipToSliver = make(map[string]string)
+	ipToSliver := make(map[string]string)
 	for _, s := range slivers {
+		// TODO(seon.wook): Consider not branching within loop but using
+		//                  delete after ipToSliver[""] = s.SiteID
 		if s.SliverIPv4 != "" {
 			ipToSliver[s.SliverIPv4] = s.SiteID
 		}
@@ -100,7 +101,6 @@ func bqMergeIntoClientGroups(rows bqRows, sliverIPMap map[string]string, newCGs 
 	var siteID string
 	var oldSR, newSR SiteRTT
 	var oldSRIdx int
-	var err error
 	var changed, ok bool
 
 	// Slice of CGs which need to be sorted later on. This is because new
@@ -125,8 +125,8 @@ func bqMergeIntoClientGroups(rows bqRows, sliverIPMap map[string]string, newCGs 
 			newCGs[clientCGIPStr] = clientCG
 		}
 
-		// Find SiteRTT entry or insert new one
-		ok = false
+		// Find SiteRTT entry
+		ok = false // Shows if entry exists
 		for i, sitertt := range clientCG.SiteRTTs {
 			if sitertt.SiteID == siteID {
 				// Found entry
@@ -136,17 +136,17 @@ func bqMergeIntoClientGroups(rows bqRows, sliverIPMap map[string]string, newCGs 
 			}
 		}
 
+		// Create new entry
 		newSR = SiteRTT{siteID, row.rtt, row.lastUpdated}
 		if !ok {
-			// No existing entry, create new entry
+			// No existing entry, add new entry
 			clientCG.SiteRTTs = append(clientCG.SiteRTTs, newSR)
 			changed = true
 		} else {
 			// Entry exists, merge with old entry
-			changed, err = MergeSiteRTTs(&oldSR, &newSR)
-			if err != nil {
-				continue
-			}
+			// NOTE: Can ignore error as error only occurs when oldSR.SiteID
+			//       != newSR.SiteID.
+			changed, _ = MergeSiteRTTs(&oldSR, &newSR)
 			if changed {
 				clientCG.SiteRTTs[oldSRIdx] = oldSR
 			}
@@ -157,6 +157,8 @@ func bqMergeIntoClientGroups(rows bqRows, sliverIPMap map[string]string, newCGs 
 	}
 
 	// Sort ClientGroups' SiteRTTs in ascending RTT order
+	// TODO(seon.wook): Consider better sorting algo in cases such as almost
+	//                  sorted lists.
 	for _, cg := range CGsToSort {
 		sort.Sort(cg.SiteRTTs)
 	}
