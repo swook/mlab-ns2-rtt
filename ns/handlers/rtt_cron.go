@@ -14,9 +14,10 @@
 
 // +build appengine
 
-package rtt
+package handlers
 
 import (
+	"code.google.com/p/mlab-ns2/gae/ns/rtt"
 	"net/http"
 	"time"
 )
@@ -36,7 +37,7 @@ func init() {
 func bqImportDaily(w http.ResponseWriter, r *http.Request) {
 	t := time.Now()
 	t = t.Add(time.Duration(-24 * 2 * time.Hour)) //Reduce time by 2 days
-	BQImportDay(r, t)
+	rtt.BQImportDay(r, t)
 }
 
 // bqImportAllTime imports all available BigQuery RTT data
@@ -47,6 +48,6 @@ func bqImportAllTime(w http.ResponseWriter, r *http.Request) {
 	// Add day until exceeds 2 days ago
 	day := time.Duration(24 * time.Hour)
 	for time := start; time.Before(end); time = time.Add(day) {
-		BQImportDay(r, time)
+		rtt.BQImportDay(r, time)
 	}
 }
