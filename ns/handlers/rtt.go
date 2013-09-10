@@ -81,7 +81,7 @@ func RTTResolver(c appengine.Context, toolID string, ip net.IP) (net.IP, error) 
 
 	// Get ClientGroup from datastore.
 	var cg rtt.ClientGroup
-	err := data.GetData(c, data.MCKey_ClientGroup(cgIP), key, &cg)
+	err := data.GetData(c, MCKey_ClientGroup(cgIP), key, &cg)
 	if err != nil {
 		if err == datastore.ErrNoSuchEntity {
 			return nil, ErrNotEnoughData
@@ -101,4 +101,10 @@ func RTTResolver(c appengine.Context, toolID string, ip net.IP) (net.IP, error) 
 	}
 	// No valid Site found.
 	return nil, ErrNotEnoughData
+}
+
+// MCKey_ClientGroup returns a key for use in memcache for rtt.ClientGroup data.
+func MCKey_ClientGroup(ip net.IP) string {
+	key := fmt.Sprintf("rtt:ClientGroup:%s", ip)
+	return key
 }
