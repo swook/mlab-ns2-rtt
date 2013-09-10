@@ -25,18 +25,15 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"regexp"
 )
 
 const (
-	URLRTTMain       = "/rtt/"
-	RTTToolIDPattern = "^/rtt/([^/]+)"
+	URLRTTMain = "/rtt/"
 )
 
 var (
 	ErrNoToolIDSpecified = errors.New("rtt: No Tool ID specified in request.")
 	ErrNotEnoughData     = errors.New("rtt: The RTT resolver has insufficient data to respond to this query.")
-	RTTToolIDRegexp, _   = regexp.Compile(RTTToolIDPattern)
 )
 
 func init() {
@@ -55,21 +52,22 @@ func RTTHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	ip := net.ParseIP(ipStr)
 
-	// Get tool ID being queried for.
-	toolIDMatch := RTTToolIDRegexp.FindStringSubmatch(r.URL.Path)
-	if len(toolIDMatch) < 2 {
-		fmt.Fprintln(w, ErrNoToolIDSpecified)
+	// Get Tool ID
+	toolID := r.FormValue("tool_id")
+	if toolID == "" {
+		http.Error(w, ErrNoToolIDSpecified.Error(), http.StatusInternalServerError)
 		return
 	}
-	toolID := toolIDMatch[1]
 
 	// Query RTT resolver.
 	resp, err := RTTResolver(c, toolID, ip)
-	if err != nil {
-		c.Errorf("rtt.RTTHandler: %s", err)
-		fmt.Fprintln(w, err)
-	} else {
+	switch err {
+	case ErrNotEnoughData:
+		http.Error(w, err.Error(), http.StatusNotFound)
+	case nil:
 		fmt.Fprintln(w, resp)
+	default:
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
