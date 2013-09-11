@@ -25,8 +25,14 @@ import (
 
 const (
 	dateFormat = "2006-01-02"
-	timeFormat = "2006-01-02 15:04:05"
 )
+
+// getDayStartEnd returns the start and end time of the day for a provided time.
+func getDayStartEnd(t time.Time) (time.Time, time.Time) {
+	startTime := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	endTime := startTime.Add(24 * time.Hour)
+	return startTime, endTime
+}
 
 // bqRow is an intermediate data structure used to make data from BigQuery more
 // accessible in the data processing and storing stage.
