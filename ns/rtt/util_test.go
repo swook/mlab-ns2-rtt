@@ -15,7 +15,6 @@
 package rtt
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"reflect"
