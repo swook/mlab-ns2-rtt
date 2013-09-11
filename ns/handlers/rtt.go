@@ -56,6 +56,7 @@ func RTTHandler(w http.ResponseWriter, r *http.Request) {
 	toolID := r.FormValue("tool_id")
 	if toolID == "" {
 		http.Error(w, ErrNoToolIDSpecified.Error(), http.StatusInternalServerError)
+		c.Errorf("rtt.RTTHandler: %s", ErrNoToolIDSpecified)
 		return
 	}
 
@@ -64,10 +65,12 @@ func RTTHandler(w http.ResponseWriter, r *http.Request) {
 	switch err {
 	case ErrNotEnoughData:
 		http.Error(w, err.Error(), http.StatusNotFound)
+		c.Errorf("rtt.RTTHandler: %s", err)
 	case nil:
 		fmt.Fprintln(w, resp)
 	default:
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.Errorf("rtt.RTTHandler: %s", err)
 	}
 }
 
