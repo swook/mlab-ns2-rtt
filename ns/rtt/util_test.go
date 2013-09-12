@@ -149,7 +149,7 @@ var mergeClientGroupsTests = []struct {
 		}},
 		true,
 	},
-	// No change
+	// Resulting in no change
 	{
 		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
 			SiteRTT{"abc01", 0.7, time.Unix(4, 0)},
@@ -162,6 +162,19 @@ var mergeClientGroupsTests = []struct {
 		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
 			SiteRTT{"abc01", 0.7, time.Unix(4, 0)},
 			SiteRTT{"def01", 4.0, time.Unix(5, 0)},
+		}},
+		false,
+	},
+	// No change
+	{
+		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
+			SiteRTT{"abc01", 0.7, time.Unix(4, 0)},
+		}},
+		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
+			SiteRTT{"abc01", 0.7, time.Unix(4, 0)},
+		}},
+		&ClientGroup{[]byte{173, 194, 36, 73}, []SiteRTT{
+			SiteRTT{"abc01", 0.7, time.Unix(4, 0)},
 		}},
 		false,
 	},

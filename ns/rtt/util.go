@@ -56,6 +56,9 @@ func MergeSiteRTTs(oldSR, newSR *SiteRTT) (bool, error) {
 	if oldSR.SiteID != newSR.SiteID {
 		return false, ErrMergeSiteRTT
 	}
+	if newSR.RTT == oldSR.RTT && oldSR.LastUpdated.Equal(newSR.LastUpdated) {
+		return false, nil
+	}
 	if newSR.RTT <= oldSR.RTT {
 		oldSR.RTT = newSR.RTT
 		oldSR.LastUpdated = newSR.LastUpdated
