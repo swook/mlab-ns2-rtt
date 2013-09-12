@@ -13,7 +13,7 @@
 # limitations under the License.
 
 backends:
-- name: rtt-import-daily
+- name: backend-b4
   class: B4
   start: _go_app
   options: dynamic

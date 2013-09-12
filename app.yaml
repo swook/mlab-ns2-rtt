@@ -39,6 +39,11 @@ handlers:
   upload: static/images/(.*\.(gif|jpg|png))
   expiration: "30d"
 
+- url: /tasks/.*
+  script: _go_app
+  login: admin
+  auth_fail_action: redirect
+
 - url: /admin/.*
   script: _go_app
   login: admin
@@ -55,10 +60,6 @@ handlers:
 
 - url: /_ah/.*
   script: _go_app
-
-- url: /rtt/import/.*
-  script: _go_app
-  login: admin
 
 - url: /.*
   script: _go_app

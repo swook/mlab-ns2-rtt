@@ -17,14 +17,15 @@
 package handlers
 
 import (
+	"appengine"
 	"code.google.com/p/mlab-ns2/gae/ns/rtt"
 	"net/http"
 	"time"
 )
 
 const (
-	URLBQImportDaily = "/rtt/import/daily"
-	URLBQImportAll   = "/rtt/import/all"
+	URLBQImportDaily = "/admin/rtt/import/daily"
+	URLBQImportAll   = "/admin/rtt/import/all"
 )
 
 func init() {
@@ -36,12 +37,18 @@ func init() {
 // from BigQuery to update the RTT database
 func bqImportDaily(w http.ResponseWriter, r *http.Request) {
 	t := time.Now()
-	t = t.Add(time.Duration(-24 * 2 * time.Hour)) //Reduce time by 2 days
+	t = t.Add(time.Duration(-24 * 3 * time.Hour)) //Reduce time by 2 days
 	rtt.BQImportDay(r, t)
 }
 
 // bqImportAllTime imports all available BigQuery RTT data
 func bqImportAllTime(w http.ResponseWriter, r *http.Request) {
+	c := appengine.NewContext(r)
+	c.Warningf(`This job will import all data since 23rd June 2013.
+		Be aware that there will be high resource usage, and that this
+		action should be canceled as necessary by shutting the relevant
+		instance down.`)
+
 	start := time.Unix(1371945577, 0) // First RTT data entry in BigQuery is unix time 1371945577
 	end := time.Now().Add(time.Duration(-24 * 2 * time.Hour))
 
