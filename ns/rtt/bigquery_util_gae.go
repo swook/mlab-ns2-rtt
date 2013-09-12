@@ -21,70 +21,113 @@ import (
 	"appengine/datastore"
 )
 
-// dsWriteChunk is a structure with which new ClientGroup lists can be split
-// into lengths <= MaxDSWritePerQuery such that datastore.PutMulti works.
+const (
+	MaxDSReadPerQuery  = 1000
+	MaxDSWritePerQuery = 500
+)
+
+// dsReadChunk is a structure with which new ClientGroup lists can be split into
+// lengths <= MaxDSReadPerQuery such that datastore.GetMulti works.
 type dsReadChunk struct {
-	Keys []*datastore.Key
-	CGs  []*ClientGroup
+	keys []*datastore.Key
+	cgs  []*ClientGroup
 }
 
-// appendNewDSReadChunk appends a new dsReadChunk to an existing []*dsReadChunk
-func appendNewDSReadChunk(chunks []*dsReadChunk) []*dsReadChunk {
-	thisChunk := &dsReadChunk{
-		Keys: make([]*datastore.Key, 0, MaxDSReadPerQuery),
-		CGs:  make([]*ClientGroup, 0, MaxDSReadPerQuery),
+// len returns the length of the slice *dsReadChunk.keys.
+func (c *dsReadChunk) len() int {
+	return len(c.keys)
+}
+
+// newDSReadChunk returns a new *dsReadChunk with the keys and cgs slices made.
+func newDSReadChunk() *dsReadChunk {
+	return &dsReadChunk{
+		keys: make([]*datastore.Key, 0, MaxDSReadPerQuery),
+		cgs:  make([]*ClientGroup, 0, MaxDSReadPerQuery),
 	}
-	return append(chunks, thisChunk)
 }
 
-// populateDSReadChunks divides GetMulti operations into MaxDSReadPerQuery sized
-// operations to adhere with GAE limits for a given map[string]*ClientGroup.
-func divideIntoDSReadChunks(c appengine.Context, newCGs map[string]*ClientGroup) []*dsReadChunk {
+// divideIntoDSReadChunks divides GetMulti operations into MaxDSReadPerQuery
+// sized operations to adhere with GAE limits for a given map[string]*ClientGroup.
+func divideIntoDSReadChunks(c appengine.Context, newcgs map[string]*ClientGroup) []*dsReadChunk {
 	chunks := make([]*dsReadChunk, 0)
-	chunks = appendNewDSReadChunk(chunks) // Create initial dsReadChunk
+	chunk := newDSReadChunk()
 
-	var thisChunk *dsReadChunk
 	rttKey := datastore.NewKey(c, "string", "rtt", 0, nil) // Parent key for ClientGroup entities
-	for cgStr, cg := range newCGs {
+
+	for cgStr, cg := range newcgs {
 		// Add into chunk
-		thisChunk.Keys = append(thisChunk.Keys, datastore.NewKey(c, "ClientGroup", cgStr, 0, rttKey))
-		thisChunk.CGs = append(thisChunk.CGs, cg)
+		chunk.keys = append(chunk.keys, datastore.NewKey(c, "ClientGroup", cgStr, 0, rttKey))
+		chunk.cgs = append(chunk.cgs, cg)
 
 		// Make sure read chunks are only as large as MaxDSReadPerQuery.
 		// Create new chunk if size reached.
-		if len(thisChunk.CGs) == MaxDSReadPerQuery {
-			chunks = appendNewDSReadChunk(chunks)
+		if chunk.len() == MaxDSReadPerQuery {
+			chunks = append(chunks, chunk)
+			chunk = newDSReadChunk()
 		}
 	}
 	return chunks
 }
 
-// addToPutQueue places a newly updated ClientGroup in a queue. This queue
-// is later processed by processPutQueue.
-func addToPutQueue(c appengine.Context, idx int, keys []*datastore.Key, keysToPut []*datastore.Key, cgsToPut []ClientGroup, oldCGs []ClientGroup, totalPutN int) ([]*datastore.Key, []ClientGroup, int) {
-	keysToPut = append(keysToPut, keys[idx])
-	cgsToPut = append(cgsToPut, oldCGs[idx])
-
-	// Write in MaxDSWritePerQuery chunks to adhere with GAE limits.
-	if len(keysToPut) == MaxDSWritePerQuery {
-		keysToPut, cgsToPut, totalPutN = processPutQueue(c, keysToPut, cgsToPut, totalPutN)
-	}
-	return keysToPut, cgsToPut, totalPutN
+// dsWriteChunk is a structure with which new ClientGroup lists can be split
+// into lengths <= MaxDSWritePerQuery such that datastore.PutMulti works.
+type dsWriteChunk struct {
+	keys []*datastore.Key
+	cgs  []ClientGroup
 }
 
-// processPutQueue processes a queue of newly updated ClientGroups. This is
-// done so that MaxDSWritePerQuery no. of Puts can be done to reduce the
-// number of queries to datastore and therefore the time taken to Put all
-// changes to datastore.
-func processPutQueue(c appengine.Context, keysToPut []*datastore.Key, cgsToPut []ClientGroup, totalPutN int) ([]*datastore.Key, []ClientGroup, int) {
-	totalPutN += len(cgsToPut)
-	c.Infof("rtt: Putting %v records into datastore. (Total: %d rows)", len(cgsToPut), totalPutN)
+// len returns the length of the slice *dsWriteChunk.keys.
+func (c *dsWriteChunk) len() int {
+	return len(c.keys)
+}
 
-	_, err := datastore.PutMulti(c, keysToPut, cgsToPut)
+// newDSWriteChunk returns a new *dsWriteChunk with the keys and cgs slices made.
+func newDSWriteChunk() *dsWriteChunk {
+	return &dsWriteChunk{
+		keys: make([]*datastore.Key, 0, MaxDSWritePerQuery),
+		cgs:  make([]ClientGroup, 0, MaxDSWritePerQuery),
+	}
+}
+
+// putQueueRequest keeps track of a queue for datastore.PutMulti requests, as
+// well as the total number of Puts done.
+type putQueueRequest struct {
+	key   *datastore.Key
+	cg    *ClientGroup
+	queue *dsWriteChunk
+	putN  int
+}
+
+// add places a newly updated ClientGroup in a PutMulti queue. This queue is
+// later processed by putQueueRequest.process.
+func (r *putQueueRequest) add(c appengine.Context, k *datastore.Key, cg *ClientGroup) {
+	if r.queue == nil || r.queue.keys == nil {
+		r.queue = newDSWriteChunk()
+	}
+
+	r.queue.keys = append(r.queue.keys, k)
+	r.queue.cgs = append(r.queue.cgs, *cg)
+
+	if r.queue.len() == MaxDSWritePerQuery {
+		r.process(c)
+	}
+}
+
+// process processes a queue of newly updated ClientGroups. This is done so that
+// MaxDSWritePerQuery no. of Puts can be done to reduce the number of queries to
+// datastore and therefore the time taken to Put all changes to datastore.
+func (r *putQueueRequest) process(c appengine.Context) {
+	if r.queue == nil || r.queue.len() == 0 { // Don't process further if nothing to process
+		return
+	}
+	n := r.queue.len()
+
+	r.putN += n
+	c.Infof("rtt: Putting %v records into datastore. (Total: %d rows)", n, r.putN)
+
+	_, err := datastore.PutMulti(c, r.queue.keys, r.queue.cgs)
 	if err != nil {
 		c.Errorf("rtt.bqMergeWithDatastore:datastore.PutMulti: %s", err)
 	}
-	keysToPut = make([]*datastore.Key, 0, MaxDSWritePerQuery)
-	cgsToPut = make([]ClientGroup, 0, MaxDSWritePerQuery)
-	return keysToPut, cgsToPut, totalPutN
+	r.queue = newDSWriteChunk()
 }
