@@ -24,13 +24,17 @@ import (
 )
 
 const (
-	dateFormat = "2006-01-02"
+	DateFormat = "2006-01-02"
+)
+
+var (
+	Day = 24 * time.Hour
 )
 
 // getDayStartEnd returns the start and end time of the day for a provided time.
 func getDayStartEnd(t time.Time) (time.Time, time.Time) {
 	startTime := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
-	endTime := startTime.Add(24 * time.Hour)
+	endTime := startTime.Add(Day - 1)
 	return startTime, endTime
 }
 

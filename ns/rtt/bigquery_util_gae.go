@@ -52,11 +52,10 @@ func divideIntoDSReadChunks(c appengine.Context, newcgs map[string]*ClientGroup)
 	chunks := make([]*dsReadChunk, 0)
 	chunk := newDSReadChunk()
 
-	rttKey := datastore.NewKey(c, "string", "rtt", 0, nil) // Parent key for ClientGroup entities
-
+	parentKey := DatastoreParentKey(c)
 	for cgStr, cg := range newcgs {
 		// Add into chunk
-		chunk.keys = append(chunk.keys, datastore.NewKey(c, "ClientGroup", cgStr, 0, rttKey))
+		chunk.keys = append(chunk.keys, datastore.NewKey(c, "ClientGroup", cgStr, 0, parentKey))
 		chunk.cgs = append(chunk.cgs, cg)
 
 		// Make sure read chunks are only as large as MaxDSReadPerQuery.
@@ -130,4 +129,12 @@ func (r *putQueueRequest) process(c appengine.Context) {
 		c.Errorf("rtt.bqMergeWithDatastore:datastore.PutMulti: %s", err)
 	}
 	r.queue = newDSWriteChunk()
+}
+
+func addTaskClientGroupPut(c appengine.Context, cgs []ClientGroup) {
+	return
+}
+
+func DatastoreParentKey(c appengine.Context) *datastore.Key {
+	return datastore.NewKey(c, "string", "rtt", 0, nil)
 }

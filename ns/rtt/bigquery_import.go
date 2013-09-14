@@ -101,17 +101,18 @@ func bqInit(r *http.Request) (*bigquery.Service, error) {
 
 // BQImportDay queries BigQuery for RTT data from a specific day and stores new
 // data into datastore
-func BQImportDay(r *http.Request, t time.Time) {
+func BQImportDay(w http.ResponseWriter, r *http.Request, t time.Time) {
 	c := appengine.NewContext(r)
 	service, err := bqInit(r)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		c.Errorf("rtt: BQImportDay.bqInit: %s", err)
 		return
 	}
 
 	// Format strings to insert into bqQueryFormat
 	tableName := fmt.Sprintf("measurement-lab:m_lab.%.4d_%.2d", t.Year(), t.Month())
-	dateStr := t.Format(dateFormat)
+	dateStr := t.Format(DateFormat)
 	startTime, endTime := getDayStartEnd(t)
 
 	// Construct query
@@ -129,6 +130,7 @@ func BQImportDay(r *http.Request, t time.Time) {
 	queryCall := jobsService.Query(BigQueryBillableProjectID, q)
 	response, err := queryCall.Do()
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		c.Errorf("rtt.BQImportDay:bigquery.JobsService.Query: %s", err)
 		return
 	}
@@ -137,6 +139,7 @@ func BQImportDay(r *http.Request, t time.Time) {
 	newCGs := make(map[string]*ClientGroup)
 	sliverTools, err := data.GetSliverTools(c)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		c.Errorf("rtt.BQImportDay:data.GetSliverTools: %s", err)
 	}
 	sliverIPMap := makeMapIPStrToSiteID(sliverTools)
@@ -164,6 +167,7 @@ func BQImportDay(r *http.Request, t time.Time) {
 
 			respMore, err = getQueryResultsCall.Do()
 			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 				c.Errorf("rtt.BQImportDay:bigquery.JobsGetQueryResponseCall: %s", err)
 				return
 			}
