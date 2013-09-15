@@ -22,6 +22,7 @@ import (
 	"appengine/memcache"
 	"appengine/taskqueue"
 	"code.google.com/p/mlab-ns2/gae/ns/rtt"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -51,6 +52,7 @@ func addTaskRTTImportDay(w http.ResponseWriter, r *http.Request, t time.Time) {
 		c.Errorf("handlers.addTaskRTTImportDay:taskqueue.Add: %s", err)
 		return
 	}
+	fmt.Fprintf(w, "Submitted BQ import task for %s", date)
 }
 
 // processTaskRTTImportDay processes a taskqueue task for an import of BigQuery
