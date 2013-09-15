@@ -12,10 +12,10 @@ import (
 )
 
 func init() {
-	// http.HandleFunc("/tmp", convertSites)
+	// http.HandleFunc("/tmp", ConvertSites)
 }
 
-func convertSites(w http.ResponseWriter, r *http.Request) {
+func ConvertSites(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 	q := datastore.NewQuery("Site").KeysOnly()
 	keys, _ := q.GetAll(c, nil)
