@@ -25,10 +25,8 @@ import (
 )
 
 const (
-	URLRTTImportDay   = "/admin/rtt/import/day"
-	URLRTTImportDaily = "/admin/rtt/import/daily"
-	URLRTTImportAll   = "/admin/rtt/import/all"
-
+	URLRTTImportDay             = "/admin/rtt/import/day"
+	URLRTTImportDaily           = "/admin/rtt/import/daily"
 	URLRTTSetLastSuccImportDate = "/admin/rtt/import/setLastSuccessfulDate"
 )
 

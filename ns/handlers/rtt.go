@@ -27,7 +27,9 @@ import (
 	"net/http"
 )
 
-const URLRTTMain = "/rtt/"
+const (
+	URLRTTMain = "/rtt/"
+)
 
 var (
 	ErrNoToolIDSpecified = errors.New("rtt: No Tool ID specified in request.")
