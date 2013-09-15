@@ -68,7 +68,8 @@ func rttImportDaily(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// rttSetLastSuccImportDate
+// rttSetLastSuccImportDate sets the last successful import date such that an
+// import of all data from the set date can be done via cronjobs.
 func rttSetLastSuccImportDate(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 

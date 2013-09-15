@@ -19,8 +19,8 @@ package rtt
 import (
 	"appengine"
 	"appengine/datastore"
-	// "appengine/urlfetch"
-	// "code.google.com/p/golog2bq/log2bq"
+	"appengine/urlfetch"
+	"code.google.com/p/golog2bq/log2bq"
 	"code.google.com/p/google-api-go-client/bigquery/v2"
 	"code.google.com/p/mlab-ns2/gae/ns/data"
 	"fmt"
@@ -74,30 +74,30 @@ const bqQueryFormat = `SELECT
 		connection_spec.server_ip,
 		paris_traceroute_hop.dest_ip;`
 
-// // bqInit authenticates a transport using OAuth and returns a *bigquery.Service
-// // with which to make queries to bigquery.
-// func bqInit(r *http.Request) (*bigquery.Service, error) {
-// 	c := appengine.NewContext(r)
+// bqInit authenticates a transport using OAuth and returns a *bigquery.Service
+// with which to make queries to bigquery.
+func bqInit(r *http.Request) (*bigquery.Service, error) {
+	c := appengine.NewContext(r)
 
-// 	// Get transport from log2bq's utility function GAETransport
-// 	transport, err := log2bq.GAETransport(c, bigquery.BigqueryScope)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	// Get transport from log2bq's utility function GAETransport
+	transport, err := log2bq.GAETransport(c, bigquery.BigqueryScope)
+	if err != nil {
+		return nil, err
+	}
 
-// 	// Set maximum urlfetch request deadline
-// 	transport.Transport = &urlfetch.Transport{
-// 		Context:  c,
-// 		Deadline: 10 * time.Minute,
-// 	}
+	// Set maximum urlfetch request deadline
+	transport.Transport = &urlfetch.Transport{
+		Context:  c,
+		Deadline: 10 * time.Minute,
+	}
 
-// 	client, err := transport.Client()
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	client, err := transport.Client()
+	if err != nil {
+		return nil, err
+	}
 
-// 	return bigquery.New(client)
-// }
+	return bigquery.New(client)
+}
 
 // BQImportDay queries BigQuery for RTT data from a specific day and stores new
 // data into datastore
@@ -156,7 +156,7 @@ func BQImportDay(w http.ResponseWriter, r *http.Request, t time.Time) {
 
 	// Request for more results if not all results returned.
 	// TODO(seon.wook): Good place to look for optimizations using channels.
-	if n > totalN {
+	if n < totalN {
 		// Make further requests
 		getQueryResultsCall := jobsService.GetQueryResults(projID, jobID)
 		var respMore *bigquery.GetQueryResultsResponse
