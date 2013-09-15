@@ -89,8 +89,8 @@ func GetSiteWithSiteID(c appengine.Context, siteID string) (*Site, error) {
 
 // GetAllSites returns an array of all the Sites in the datastore
 func GetAllSites(c appengine.Context) ([]*Site, []*datastore.Key, error) {
-	q := datastore.NewQuery("Sites")
+	q := datastore.NewQuery("Site")
 	var sites []*Site
-	sk, err := q.GetAll(c, sites)
+	sk, err := q.GetAll(c, &sites)
 	return sites, sk, err
 }
