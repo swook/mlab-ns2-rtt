@@ -27,17 +27,9 @@ import (
 	"time"
 )
 
-const (
-	URLTaskRTTImportDay         = "/admin/tasks/rtt/import/day"
-	URLTaskRTTImportPut         = "/admin/tasks/rtt/put"
-	URLRTTSetLastSuccImportDate = "/admin/rtt/import/setLastSuccessfulDate"
-	TaskQueueNameRTTImport      = "rtt-import"
-	FormKeyRTTPutKey            = "key"
-)
-
 func init() {
-	http.HandleFunc(URLTaskRTTImportDay, processTaskRTTImportDay)
-	http.HandleFunc(URLTaskRTTImportPut, processTaskRTTCGPut)
+	http.HandleFunc(rtt.URLTaskImportDay, processTaskRTTImportDay)
+	http.HandleFunc(rtt.URLTaskImportPut, processTaskRTTCGPut)
 }
 
 func addTaskRTTImportDay(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -48,9 +40,9 @@ func addTaskRTTImportDay(w http.ResponseWriter, r *http.Request, t time.Time) {
 	c.Infof("handlers.addTaskRTTImportDay: Submitting BQ import task for %s", date)
 
 	values := make(url.Values)
-	values.Add(FormKeyRTTImportDate, date)
-	task := taskqueue.NewPOSTTask(URLTaskRTTImportDay, values)
-	_, err := taskqueue.Add(c, task, TaskQueueNameRTTImport)
+	values.Add(rtt.FormKeyImportDate, date)
+	task := taskqueue.NewPOSTTask(rtt.URLTaskImportDay, values)
+	_, err := taskqueue.Add(c, task, rtt.TaskQueueNameImport)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		c.Errorf("handlers.addTaskRTTImportDay:taskqueue.Add: %s", err)
@@ -61,7 +53,7 @@ func addTaskRTTImportDay(w http.ResponseWriter, r *http.Request, t time.Time) {
 func processTaskRTTImportDay(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 
-	dateStr := r.FormValue(FormKeyRTTImportDate)
+	dateStr := r.FormValue(rtt.FormKeyImportDate)
 	t, err := time.Parse(rtt.DateFormat, dateStr)
 	if err != nil {
 		http.Error(w, ErrInvalidDate.Error(), http.StatusInternalServerError)

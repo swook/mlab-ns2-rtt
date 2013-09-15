@@ -24,28 +24,21 @@ import (
 	"time"
 )
 
-const (
-	URLRTTImportDay      = "/admin/rtt/import/day"
-	URLRTTImportDaily    = "/admin/rtt/import/daily"
-	URLRTTImportAll      = "/admin/rtt/import/all"
-	FormKeyRTTImportDate = "date"
-)
-
 var (
 	ErrNoDateSpecified = errors.New("rtt: No date specified in request.")
 	ErrInvalidDate     = errors.New("rtt: Invalid date specified in request.")
 )
 
 func init() {
-	http.HandleFunc(URLRTTImportDaily, rttImportDaily)
-	http.HandleFunc(URLRTTImportAll, rttImportAllTime)
+	http.HandleFunc(rtt.URLImportDaily, rttImportDaily)
+	http.HandleFunc(rtt.URLImportAll, rttImportAllTime)
 }
 
 // rttImportDay imports bigquery data for a specified day.
 func rttImportDay(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 
-	dateStr := r.FormValue(FormKeyRTTImportDate)
+	dateStr := r.FormValue(rtt.FormKeyImportDate)
 	if dateStr == "" {
 		http.Error(w, ErrNoDateSpecified.Error(), http.StatusInternalServerError)
 		c.Errorf("handlers.bqImportDay:http.Request.FormValue: %v", ErrNoDateSpecified)

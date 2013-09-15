@@ -27,17 +27,13 @@ import (
 	"net/http"
 )
 
-const (
-	URLRTTMain = "/rtt/"
-)
-
 var (
 	ErrNoToolIDSpecified = errors.New("rtt: No Tool ID specified in request.")
 	ErrNotEnoughData     = errors.New("rtt: The RTT resolver has insufficient data to respond to this query.")
 )
 
 func init() {
-	http.HandleFunc(URLRTTMain, RTTHandler)
+	http.HandleFunc(rtt.URLMain, RTTHandler)
 }
 
 // RTTHandler is a simple handler which uses the URL parameter 'url' or client's

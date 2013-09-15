@@ -23,13 +23,9 @@ import (
 	"time"
 )
 
-const (
-	DateFormat = "2006-01-02"
-)
+const DateFormat = "2006-01-02"
 
-var (
-	Day = 24 * time.Hour
-)
+var Day = 24 * time.Hour
 
 // getDayStartEnd returns the start and end time of the day for a provided time.
 func getDayStartEnd(t time.Time) (time.Time, time.Time) {

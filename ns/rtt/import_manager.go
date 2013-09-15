@@ -22,18 +22,12 @@ import (
 	"time"
 )
 
-const (
-	KeyLastSuccImport = "rtt:LastSuccessfulImport"
-)
-
-var (
-	EarliestTimewithRTTData = time.Unix(1371945577, 0)
-)
+var EarliestTimewithRTTData = time.Unix(1371945577, 0)
 
 // GetLastSuccesfulImportDate returns the last recorded time of a successful
 // bigquery import.
 func GetLastSuccesfulImportDate(c appengine.Context) (time.Time, error) {
-	key := datastore.NewKey(c, "time.Time", KeyLastSuccImport, 0, nil)
+	key := datastore.NewKey(c, "time.Time", DSKeyLastSuccImport, 0, nil)
 	var t time.Time
 	err := datastore.Get(c, key, &t)
 	if err == datastore.ErrNoSuchEntity {
@@ -47,7 +41,7 @@ func GetLastSuccesfulImportDate(c appengine.Context) (time.Time, error) {
 // SetLastSuccesfulImportDate sets a time as the last recorded time of a
 // successful bigquery import.
 func SetLastSuccessfulImportDate(c appengine.Context, t time.Time) error {
-	key := datastore.NewKey(c, "time.Time", KeyLastSuccImport, 0, nil)
+	key := datastore.NewKey(c, "time.Time", DSKeyLastSuccImport, 0, nil)
 	if _, err := datastore.Put(c, key, t); err != nil {
 		return err
 	}
