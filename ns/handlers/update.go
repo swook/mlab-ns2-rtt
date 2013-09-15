@@ -48,8 +48,8 @@ func init() {
 }
 
 // getAllKsSites returns a list of all sites from ks
-func getAllKsSites(c appengine.Context) ([]data.Site, error) {
-	var ksSites []data.Site
+func getAllKsSites(c appengine.Context) ([]*data.Site, error) {
+	var ksSites []*data.Site
 	client := urlfetch.Client(c)
 	res, err := client.Get(KsSitesUrl)
 	if err != nil {
@@ -63,7 +63,7 @@ func getAllKsSites(c appengine.Context) ([]data.Site, error) {
 }
 
 // validateSites checks if required site information is available
-func validateSite(site data.Site) bool {
+func validateSite(site *data.Site) bool {
 	// required fields: SiteID, Latitude, Longitude, Country, Metro
 	if site.SiteID == "" || site.Latitude == 0 || site.Longitude == 0 || site.Country == "" || len(site.Metro) == 0 {
 		return false
@@ -89,7 +89,7 @@ func difference(mlabSiteIds, ksSiteIds map[string]int) map[string]int {
 // registerSite puts a Site and corresponding SliverTools in the datastore
 func registerSite(c appengine.Context, site *data.Site) ([]*datastore.Key, error) {
 
-	key := datastore.NewKey(c, "Sites", site.SiteID, 0, nil)
+	key := datastore.NewKey(c, "Site", site.SiteID, 0, nil)
 	site.When = time.Now()
 	_, err := datastore.Put(c, key, site)
 	if err != nil {
@@ -105,31 +105,34 @@ func registerSite(c appengine.Context, site *data.Site) ([]*datastore.Key, error
 
 	sliverTools := make([]*data.SliverTool, len(tools)*numServers)
 	slKeys := make([]*datastore.Key, len(tools)*numServers)
+	i := 0
 	for _, tool := range tools {
 		for _, serverID := range serverIDs {
 			sliverToolID := data.GetSliverToolID(tool.ToolID, tool.SliceID, serverID, site.SiteID)
 			sliceParts := strings.Split(tool.SliceID, "_")
 			sliverTool := &data.SliverTool{
-				ToolID:     tool.ToolID,
-				SliceID:    tool.SliceID,
-				SiteID:     site.SiteID,
-				ServerID:   serverID,
-				FQDN:       fmt.Sprintf("%s-%s-%s-%s", sliceParts[1], sliceParts[0], site.SiteID, "measurement-lab.org"),
-				ServerPort: "",
-				HTTPPort:   tool.HTTPPort,
-				SliverIPv4: "off",
-				SliverIPv6: "off",
-				StatusIPv4: "offline",
-				StatusIPv6: "offline",
-				Latitude:   site.Latitude,
-				Longitude:  site.Longitude,
-				City:       site.City,
-				Country:    site.Country,
-				When:       time.Now(),
+				ToolID:                 tool.ToolID,
+				SliceID:                tool.SliceID,
+				SiteID:                 site.SiteID,
+				ServerID:               serverID,
+				FQDN:                   fmt.Sprintf("%s.%s.%s.%s.%s", sliceParts[1], sliceParts[0], serverID, site.SiteID, "measurement-lab.org"),
+				ServerPort:             "",
+				HTTPPort:               tool.HTTPPort,
+				SliverIPv4:             "off",
+				SliverIPv6:             "off",
+				UpdateRequestTimestamp: site.RegistrationTimestamp,
+				StatusIPv4:             "offline",
+				StatusIPv6:             "offline",
+				Latitude:               site.Latitude,
+				Longitude:              site.Longitude,
+				City:                   site.City,
+				Country:                site.Country,
+				When:                   time.Now(),
 			}
-			slKey := datastore.NewKey(c, "SliverTools", sliverToolID, 0, nil)
-			slKeys = append(slKeys, slKey)
-			sliverTools = append(sliverTools, sliverTool)
+			slKey := datastore.NewKey(c, "SliverTool", sliverToolID, 0, nil)
+			slKeys[i] = slKey
+			sliverTools[i] = sliverTool
+			i++
 		}
 	}
 	return datastore.PutMulti(c, slKeys, sliverTools)
@@ -148,11 +151,12 @@ func KsRegistrationHandler(w http.ResponseWriter, r *http.Request) {
 
 	ksSiteIds := make(map[string]int)
 	validSites := make([]*data.Site, len(ksSites))
-
+	i := 0
 	for _, site := range ksSites {
 		if validateSite(site) {
-			validSites = append(validSites, &site)
+			validSites[i] = site
 			ksSiteIds[site.SiteID] = 1
+			i++
 		} else {
 			c.Errorf("KsRegistrationHandler:validateSite err = %v", ErrInvalidKsSite)
 		}
