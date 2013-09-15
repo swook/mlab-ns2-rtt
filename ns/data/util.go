@@ -39,6 +39,16 @@ func GetData(c appengine.Context, mcKey string, dsKey *datastore.Key, dst interf
 	return err
 }
 
+// SetData puts data into the datastore and also caches the result into
+// memcache.
+func SetData(c appengine.Context, mcKey string, dsKey *datastore.Key, data interface{}) error {
+	if _, err := datastore.Put(c, dsKey, data); err != nil {
+		return err
+	}
+	mcSet(c, mcKey, data)
+	return nil
+}
+
 // QueryData returns a datastore.Query.GetAll result and also caches the result
 // into memcache.
 func QueryData(c appengine.Context, mcKey string, q *datastore.Query, dst interface{}) error {
