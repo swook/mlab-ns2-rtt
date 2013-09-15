@@ -110,10 +110,10 @@ func processTaskRTTCGPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c.Infof("handlers: %d ClientGroups were successfully put into datastore.", len(data))
+	dateStr := r.FormValue(rtt.FormKeyImportDate)
+	c.Infof("handlers: %d ClientGroups were successfully put into datastore. (%s)", len(data), dateStr)
 
 	// Get which date this import is for
-	dateStr := r.FormValue(rtt.FormKeyImportDate)
 	t, err := time.Parse(rtt.DateFormat, dateStr)
 	if err != nil {
 		// Don't return HTTP error since incorrect date cannot be fixed.
