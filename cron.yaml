@@ -15,5 +15,5 @@
 cron:
 - description: rtt. Daily import of BigQuery data
   url: /admin/rtt/import/daily
-  schedule: every 24 hours
+  schedule: every 8 hours
   target: backend-b4
