@@ -23,6 +23,7 @@ import (
 	"code.google.com/p/golog2bq/log2bq"
 	"code.google.com/p/google-api-go-client/bigquery/v2"
 	"code.google.com/p/mlab-ns2/gae/ns/data"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -32,6 +33,8 @@ const (
 	MaxBQResponseRows         = 50000 //Response size must be less than 32MB. 100k rows occasionally caused problems.
 	BigQueryBillableProjectID = "mlab-ns2"
 )
+
+var ErrNoBigQueryData = errors.New("No BigQuery rows received in response from query.")
 
 // bqQueryFormat is the query used to pull RTT data from the M-Lab BigQuery
 // dataset.
@@ -182,6 +185,12 @@ func BQImportDay(w http.ResponseWriter, r *http.Request, t time.Time) {
 	}
 
 	c.Infof("rtt: Reduced %d rows to %d rows. Merging into datastore.", totalN, len(newCGs))
+
+	if totalN == 0 {
+		http.Error(w, ErrNoBigQueryData.Error(), http.StatusInternalServerError)
+		c.Errorf("rtt.BQImportDay: %s", ErrNoBigQueryData)
+		return
+	}
 
 	bqMergeWithDatastore(c, dateStr, newCGs)
 }
