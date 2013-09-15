@@ -15,21 +15,12 @@
 package rtt
 
 const (
-	URLMain = "/rtt/"
-
-	URLTaskImportDay         = "/admin/tasks/rtt/import/day"
-	URLTaskImportPut         = "/admin/tasks/rtt/put"
-	URLSetLastSuccImportDate = "/admin/rtt/import/setLastSuccessfulDate"
-
-	URLImportDay   = "/admin/rtt/import/day"
-	URLImportDaily = "/admin/rtt/import/daily"
-	URLImportAll   = "/admin/rtt/import/all"
+	URLTaskImportDay = "/admin/tasks/rtt/import/day"
+	URLTaskImportPut = "/admin/tasks/rtt/put"
 
 	TaskQueueNameImport    = "rtt-import"
 	TaskQueueNameImportPut = "rtt-import-put"
 
 	FormKeyImportDate = "date"
 	FormKeyPutKey     = "key"
-
-	DSKeyLastSuccImport = "rtt:LastSuccessfulImport"
 )

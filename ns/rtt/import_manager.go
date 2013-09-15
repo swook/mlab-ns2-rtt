@@ -19,33 +19,63 @@ package rtt
 import (
 	"appengine"
 	"appengine/datastore"
+	"code.google.com/p/mlab-ns2/gae/ns/data"
 	"time"
 )
 
+const DSKeyStats = "rtt.Stats"
+
 var EarliestTimewithRTTData = time.Unix(1371945577, 0)
+
+type Stats struct {
+	LastSuccessfulImportDate time.Time
+}
 
 // GetLastSuccesfulImportDate returns the last recorded time of a successful
 // bigquery import.
 func GetLastSuccesfulImportDate(c appengine.Context) (time.Time, error) {
-	key := datastore.NewKey(c, "time.Time", DSKeyLastSuccImport, 0, nil)
-	var t time.Time
-	err := datastore.Get(c, key, &t)
+	key := datastore.NewKey(c, "Stats", DSKeyStats, 0, DatastoreParentKey(c))
+	var s Stats
+	err := data.GetData(c, DSKeyStats, key, &s)
 	if err == datastore.ErrNoSuchEntity {
 		return EarliestTimewithRTTData, nil
 	} else if err != nil {
-		return t, err
+		return s.LastSuccessfulImportDate, err
 	}
-	return t, nil
+	return s.LastSuccessfulImportDate, nil
 }
 
 // SetLastSuccesfulImportDate sets a time as the last recorded time of a
 // successful bigquery import.
 func SetLastSuccessfulImportDate(c appengine.Context, t time.Time) error {
-	key := datastore.NewKey(c, "time.Time", DSKeyLastSuccImport, 0, nil)
-	if _, err := datastore.Put(c, key, t); err != nil {
+	key := datastore.NewKey(c, "Stats", DSKeyStats, 0, DatastoreParentKey(c))
+	var s Stats
+	if err := data.GetData(c, DSKeyStats, key, &s); err != datastore.ErrNoSuchEntity && err != nil {
+		return err
+	}
+	s.LastSuccessfulImportDate = t
+	if err := data.SetData(c, DSKeyStats, key, &s); err != nil {
 		return err
 	}
 	return nil
+}
+
+// UpdateLastSuccesfulImportDate sets a time as the last recorded time of a
+// successful bigquery import if the provided time is newer than the recorded
+// time.
+func UpdateLastSuccessfulImportDate(c appengine.Context, t time.Time) error {
+	last, err := GetLastSuccesfulImportDate(c)
+	if err != nil {
+		return err
+	}
+
+	// Don't update if time provided is not newer.
+	if !last.Before(t) {
+		return nil
+	}
+
+	c.Infof("rtt: Updated the last successful date imported to: %s", t)
+	return SetLastSuccessfulImportDate(c, t)
 }
 
 // GetNextImportDay returns the next day for which to perform a bigquery import,

@@ -19,19 +19,23 @@ package handlers
 import (
 	"appengine"
 	"code.google.com/p/mlab-ns2/gae/ns/rtt"
-	"errors"
+	"fmt"
 	"net/http"
 	"time"
 )
 
-var (
-	ErrNoDateSpecified = errors.New("rtt: No date specified in request.")
-	ErrInvalidDate     = errors.New("rtt: Invalid date specified in request.")
+const (
+	URLRTTImportDay   = "/admin/rtt/import/day"
+	URLRTTImportDaily = "/admin/rtt/import/daily"
+	URLRTTImportAll   = "/admin/rtt/import/all"
+
+	URLRTTSetLastSuccImportDate = "/admin/rtt/import/setLastSuccessfulDate"
 )
 
 func init() {
-	http.HandleFunc(rtt.URLImportDaily, rttImportDaily)
-	http.HandleFunc(rtt.URLImportAll, rttImportAllTime)
+	http.HandleFunc(URLRTTImportDay, rttImportDay)
+	http.HandleFunc(URLRTTImportDaily, rttImportDaily)
+	http.HandleFunc(URLRTTSetLastSuccImportDate, rttSetLastSuccImportDate)
 }
 
 // rttImportDay imports bigquery data for a specified day.
@@ -39,15 +43,10 @@ func rttImportDay(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 
 	dateStr := r.FormValue(rtt.FormKeyImportDate)
-	if dateStr == "" {
-		http.Error(w, ErrNoDateSpecified.Error(), http.StatusInternalServerError)
-		c.Errorf("handlers.bqImportDay:http.Request.FormValue: %v", ErrNoDateSpecified)
-		return
-	}
 	t, err := time.Parse(rtt.DateFormat, dateStr)
 	if err != nil {
-		http.Error(w, ErrInvalidDate.Error(), http.StatusInternalServerError)
-		c.Errorf("handlers.bqImportDay:time.Parse: %v", ErrInvalidDate)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.Errorf("handlers.rttImportDay:time.Parse: %v", err)
 		return
 	}
 	addTaskRTTImportDay(w, r, t)
@@ -56,25 +55,36 @@ func rttImportDay(w http.ResponseWriter, r *http.Request) {
 // rttImportDaily is invoked as a daily cronjob to pull 2 day-old information
 // from BigQuery to update the RTT database
 func rttImportDaily(w http.ResponseWriter, r *http.Request) {
-	t := time.Now()
-	t = t.Add(time.Duration(-24 * 2 * time.Hour)) //Reduce time by 2 days
-	addTaskRTTImportDay(w, r, t)
+	c := appengine.NewContext(r)
+
+	now := time.Now()
+	latest := now.Add(time.Duration(-24 * 2 * time.Hour)) //Reduce time by 2 days
+	next := rtt.GetNextImportDay(c)
+
+	if next.Before(latest) {
+		addTaskRTTImportDay(w, r, next)
+	} else {
+		c.Infof("handlers.rttImportDaily: Nothing to import.")
+	}
 }
 
-// rttImportAllTime imports all available BigQuery RTT data
-func rttImportAllTime(w http.ResponseWriter, r *http.Request) {
+// rttSetLastSuccImportDate
+func rttSetLastSuccImportDate(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
-	c.Warningf(`This job will import all data since 23rd June 2013.
-		Be aware that there will be high resource usage, and that this
-		action should be canceled as necessary by shutting the relevant
-		instance down.`)
 
-	start := rtt.EarliestTimewithRTTData // First RTT data entry in BigQuery is unix time 1371945577
-	end := time.Now().Add(time.Duration(-24 * 2 * time.Hour))
-
-	// Add day until exceeds 2 days ago
-	day := time.Duration(24 * time.Hour)
-	for time := start; time.Before(end); time = time.Add(day) {
-		rtt.BQImportDay(w, r, time)
+	dateStr := r.FormValue(rtt.FormKeyImportDate)
+	t, err := time.Parse(rtt.DateFormat, dateStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.Errorf("handlers.rttSetLastSuccImportDate:time.Parse: %v", err)
+		return
 	}
+
+	if err := rtt.SetLastSuccessfulImportDate(c, t); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.Errorf("handlers.rttSetLastSuccImportDate:rtt.SetLastSuccessfulImportDate: %v", err)
+		return
+	}
+
+	fmt.Fprintf(w, "Last successful bigquery import date now set to: %s", t)
 }

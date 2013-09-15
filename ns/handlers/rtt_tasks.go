@@ -22,6 +22,7 @@ import (
 	"appengine/memcache"
 	"appengine/taskqueue"
 	"code.google.com/p/mlab-ns2/gae/ns/rtt"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -32,12 +33,14 @@ func init() {
 	http.HandleFunc(rtt.URLTaskImportPut, processTaskRTTCGPut)
 }
 
+// addTaskRTTImportDay adds a BigQuery import task into taskqueue for a
+// specified date.
 func addTaskRTTImportDay(w http.ResponseWriter, r *http.Request, t time.Time) {
 	c := appengine.NewContext(r)
 
 	date := t.Format(rtt.DateFormat)
 
-	c.Infof("handlers.addTaskRTTImportDay: Submitting BQ import task for %s", date)
+	c.Infof("handlers: Submitting BQ import task for %s", date)
 
 	values := make(url.Values)
 	values.Add(rtt.FormKeyImportDate, date)
@@ -50,49 +53,72 @@ func addTaskRTTImportDay(w http.ResponseWriter, r *http.Request, t time.Time) {
 	}
 }
 
+// processTaskRTTImportDay processes a taskqueue task for an import of BigQuery
+// data for a specified date.
 func processTaskRTTImportDay(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 
 	dateStr := r.FormValue(rtt.FormKeyImportDate)
 	t, err := time.Parse(rtt.DateFormat, dateStr)
 	if err != nil {
-		http.Error(w, ErrInvalidDate.Error(), http.StatusInternalServerError)
-		c.Errorf("handlers.processTaskRTTImportDay:time.Parse: %s", ErrInvalidDate)
+		// Don't return HTTP error since incorrect date cannot be fixed.
+		c.Errorf("handlers.processTaskRTTImportDay:time.Parse: %s", err)
 		return
 	}
 
 	rtt.BQImportDay(w, r, t)
 }
 
+// processTaskRTTCGPut processes a taskqueue task for the putting of new
+// ClientGroups into datastore.
 func processTaskRTTCGPut(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 
 	// Get memcache key to use from POST parameters
-	dataKey := r.FormValue(FormKeyRTTPutKey)
-	var data map[string]rtt.ClientGroup
+	dataKey := r.FormValue(rtt.FormKeyPutKey)
+	var data []rtt.ClientGroup
 	_, err := memcache.Gob.Get(c, dataKey, &data)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		c.Errorf("handlers.processTaskRTTDSPutMulti:memcache.Get: %s", err)
+		// Don't return HTTP error since nothing can be done if data
+		// is missing or corrupt. Just log to GAE to see how often this
+		// happens.
+		c.Errorf("handlers.processTaskRTTCGPut:memcache.Get: %s", err)
 		return
 	}
 
-	// Create lists of keys and ClientGroups to use in datastore.PutMulti
-	n := len(data)
+	// Create lists of keys to use in datastore.PutMulti
 	parentKey := rtt.DatastoreParentKey(c)
-	keys := make([]*datastore.Key, 0, n)
-	cgs := make([]rtt.ClientGroup, 0, n)
-	for k, cg := range data {
-		keys = append(keys, datastore.NewKey(c, "ClientGroup", k, 0, parentKey))
-		cgs = append(cgs, cg)
+	keys := make([]*datastore.Key, 0, len(data))
+	var key *datastore.Key
+	for _, cg := range data {
+		key = datastore.NewKey(c, "ClientGroup", net.IP(cg.Prefix).String(), 0, parentKey)
+		keys = append(keys, key)
 	}
-	data = nil // Mark map[string]ClientGroup for GC
 
-	// Perform datastore.PutMulti
-	_, err = datastore.PutMulti(c, keys, cgs)
+	// Put data into datastore
+	_, err = datastore.PutMulti(c, keys, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		c.Errorf("handlers.processTaskRTTDSPutMulti:datastore.PutMulti: %s", err)
+		c.Errorf("handlers.processTaskRTTCGPut:datastore.PutMulti: %s", err)
 		return
 	}
+
+	// Remove cached CGs
+	if err := memcache.Delete(c, dataKey); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.Errorf("handlers.processTaskRTTCGPut:memcache.Delte: %s", err)
+		return
+	}
+
+	c.Infof("handlers: %d ClientGroups were successfully put into datastore.", len(data))
+
+	// Get which date this import is for
+	dateStr := r.FormValue(rtt.FormKeyImportDate)
+	t, err := time.Parse(rtt.DateFormat, dateStr)
+	if err != nil {
+		// Don't return HTTP error since incorrect date cannot be fixed.
+		c.Errorf("handlers.processTaskRTTCGPut:time.Parse: %s", err)
+		return
+	}
+	rtt.UpdateLastSuccessfulImportDate(c, t)
 }

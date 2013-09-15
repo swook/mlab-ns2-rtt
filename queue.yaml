@@ -19,3 +19,10 @@ queue:
     task_retry_limit: 3
     min_backoff_seconds: 2
   target: backend-b4
+
+- name: rtt-import-put
+  rate: 1/s
+  bucket_size: 50
+  retry_parameters:
+    min_backoff_seconds: 2
+  target: backend-b4

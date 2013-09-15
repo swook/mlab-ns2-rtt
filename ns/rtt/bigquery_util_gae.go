@@ -19,6 +19,11 @@ package rtt
 import (
 	"appengine"
 	"appengine/datastore"
+	"appengine/memcache"
+	"appengine/taskqueue"
+	"fmt"
+	"net/url"
+	"time"
 )
 
 const (
@@ -99,7 +104,7 @@ type putQueueRequest struct {
 
 // add places a newly updated ClientGroup in a PutMulti queue. This queue is
 // later processed by putQueueRequest.process.
-func (r *putQueueRequest) add(c appengine.Context, k *datastore.Key, cg *ClientGroup) {
+func (r *putQueueRequest) add(c appengine.Context, dateStr string, k *datastore.Key, cg *ClientGroup) {
 	if r.queue == nil || r.queue.keys == nil {
 		r.queue = newDSWriteChunk()
 	}
@@ -108,33 +113,64 @@ func (r *putQueueRequest) add(c appengine.Context, k *datastore.Key, cg *ClientG
 	r.queue.cgs = append(r.queue.cgs, *cg)
 
 	if r.queue.len() == MaxDSWritePerQuery {
-		r.process(c)
+		r.process(c, dateStr)
 	}
 }
 
 // process processes a queue of newly updated ClientGroups. This is done so that
 // MaxDSWritePerQuery no. of Puts can be done to reduce the number of queries to
 // datastore and therefore the time taken to Put all changes to datastore.
-func (r *putQueueRequest) process(c appengine.Context) {
+func (r *putQueueRequest) process(c appengine.Context, dateStr string) {
 	if r.queue == nil || r.queue.len() == 0 { // Don't process further if nothing to process
 		return
 	}
 	n := r.queue.len()
 
 	r.putN += n
-	c.Infof("rtt: Putting %v records into datastore. (Total: %d rows)", n, r.putN)
+	c.Infof("rtt: Submitting put tasks for %v records. (Total: %d rows)", n, r.putN)
 
-	_, err := datastore.PutMulti(c, r.queue.keys, r.queue.cgs)
-	if err != nil {
-		c.Errorf("rtt.bqMergeWithDatastore:datastore.PutMulti: %s", err)
-	}
+	addTaskClientGroupPut(c, dateStr, r.queue.cgs)
 	r.queue = newDSWriteChunk()
 }
 
-func addTaskClientGroupPut(c appengine.Context, cgs []ClientGroup) {
-	return
+// addTaskClientGroupPut receives a list of ClientGroups to put into datastore
+// and stores it temporarily into memcache. It then submits the key as a
+// taskqueue task.
+func addTaskClientGroupPut(c appengine.Context, dateStr string, cgs []ClientGroup) {
+	// Create unique key for memcache
+	key := cgMemcachePutKey()
+
+	// Store CGs into memcache
+	item := &memcache.Item{
+		Key:    key,
+		Object: cgs,
+	}
+	if err := memcache.Gob.Set(c, item); err != nil {
+		c.Errorf("rtt.addTaskClientGroupPut:memcache.Set: %s", err)
+		return
+	}
+
+	// Submit taskqueue task
+	values := make(url.Values)
+	values.Add(FormKeyPutKey, key)
+	values.Add(FormKeyImportDate, dateStr)
+	task := taskqueue.NewPOSTTask(URLTaskImportPut, values)
+	_, err := taskqueue.Add(c, task, TaskQueueNameImportPut)
+	if err != nil {
+		c.Errorf("rtt.addTaskClientGroupPut:taskqueue.Add: %s", err)
+		return
+	}
 }
 
+// DatastoreParentKey returns a datastore key to use as a parent key for rtt
+// related datastore entries.
 func DatastoreParentKey(c appengine.Context) *datastore.Key {
 	return datastore.NewKey(c, "string", "rtt", 0, nil)
+}
+
+// cgMemcachePutKey generates a memcache key string for use in Put operations
+// when []ClientGroup is cached into memcache.
+func cgMemcachePutKey() string {
+	ns := time.Now().UnixNano()
+	return fmt.Sprintf("rtt:bqImport:Put:%d", ns)
 }
