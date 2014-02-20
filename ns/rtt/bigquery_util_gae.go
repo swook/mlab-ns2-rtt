@@ -28,7 +28,7 @@ import (
 
 const (
 	MaxDSReadPerQuery  = 1000
-	MaxDSWritePerQuery = 500
+	MaxDSWritePerQuery = 300
 )
 
 // dsReadChunk is a structure with which new ClientGroup lists can be split into

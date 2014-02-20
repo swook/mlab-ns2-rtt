@@ -91,11 +91,13 @@ var makeMapIPStrToSiteIDTests = []struct {
 			&data.SliverTool{SiteID: "ams02", SliverIPv4: "72.26.217.75", SliverIPv6: "2001:48c8:7::75"},
 			&data.SliverTool{SiteID: "lca01", SliverIPv4: "82.116.199.38"},
 			&data.SliverTool{SiteID: "lga01", SliverIPv4: "74.63.50.43", SliverIPv6: "2001:48c8:5:f::43"},
+			&data.SliverTool{SiteID: "dfw01", SliverIPv4: "38.107.216.10"},
 		},
 		map[string]string{
 			"213.244.128.164":   "ams01",
 			"72.26.217.75":      "ams02",
 			"2001:48c8:7::75":   "ams02",
+			"38.107.216.10":     "dfw01",
 			"82.116.199.38":     "lca01",
 			"74.63.50.43":       "lga01",
 			"2001:48c8:5:f::43": "lga01",
@@ -114,40 +116,47 @@ func TestMakeMapIPStrtoSiteID(t *testing.T) {
 }
 
 var bqMergeIntoClientGroupsTests = []struct {
-	in  bqRows
-	out map[string]*ClientGroup
+	in_rows bqRows
+	in_cgs  map[string]*ClientGroup
+	out     map[string]*ClientGroup
 }{
 	{
 		bqRows{
 			&bqRow{
 				time.Unix(1376828118, 0),
-				net.ParseIP("74.63.50.43"),
+				net.ParseIP("74.63.50.43"), // lga01
 				net.ParseIP("154.54.36.18"),
 				761.5423380533854,
 			},
 			&bqRow{ // Test sorting of SiteRTTs
 				time.Unix(1376828646, 0),
-				net.ParseIP("82.116.199.38"),
+				net.ParseIP("82.116.199.38"), // lca01
 				net.ParseIP("154.54.39.18"),
 				62.007999420166016,
 			},
 			&bqRow{
 				time.Unix(1376828891, 0),
-				net.ParseIP("82.116.199.38"),
+				net.ParseIP("82.116.199.38"), // lca01
 				net.ParseIP("90.185.4.231"),
 				88.22200012207031,
 			},
 			&bqRow{
 				time.Unix(1376828193, 0),
-				net.ParseIP("74.63.50.43"),
+				net.ParseIP("74.63.50.43"), // lga01
 				net.ParseIP("24.164.163.78"),
 				38.31500116984049,
 			},
 			&bqRow{ // Test merging of existing SiteRTT
 				time.Unix(1376828167, 0),
-				net.ParseIP("74.63.50.43"),
+				net.ParseIP("74.63.50.43"), // lga01
 				net.ParseIP("24.164.160.17"),
 				7.705666700998942,
+			},
+			&bqRow{
+				time.Unix(1376828645, 0),
+				net.ParseIP("38.107.216.10"), // dfw01
+				net.ParseIP("154.54.36.0"),
+				803.0,
 			},
 		},
 		map[string]*ClientGroup{
@@ -163,6 +172,28 @@ var bqMergeIntoClientGroupsTests = []struct {
 						"lga01",
 						761.5423380533854,
 						time.Unix(1376828118, 0),
+					},
+				},
+			},
+		},
+		map[string]*ClientGroup{
+			"154.54.36.0": &ClientGroup{
+				net.ParseIP("154.54.36.0").To16(),
+				SiteRTTs{
+					SiteRTT{
+						"lca01",
+						62.007999420166016,
+						time.Unix(1376828646, 0),
+					},
+					SiteRTT{
+						"lga01",
+						761.5423380533854,
+						time.Unix(1376828118, 0),
+					},
+					SiteRTT{
+						"dfw01",
+						803.0,
+						time.Unix(1376828645, 0),
 					},
 				},
 			},
@@ -191,18 +222,19 @@ var bqMergeIntoClientGroupsTests = []struct {
 }
 
 func TestBQMergeIntoClientGroups(t *testing.T) {
-	var out map[string]*ClientGroup
 	for i, tt := range bqMergeIntoClientGroupsTests {
-		out = make(map[string]*ClientGroup)
-		bqMergeIntoClientGroups(tt.in, makeMapIPStrToSiteIDTests[0].out, out)
+		bqMergeIntoClientGroups(tt.in_rows, makeMapIPStrToSiteIDTests[0].out, tt.in_cgs)
 
 		// Make all ClientGroup.Prefix 16 bytes long to allow for reflect.DeepEqual comparison.
-		for _, cg := range out {
+		for _, cg := range tt.in_cgs {
 			cg.Prefix = net.IP(cg.Prefix).To16()
 		}
 
-		if !reflect.DeepEqual(tt.out, out) {
-			t.Fatalf("Error in index %d of bqMergeIntoClientGroups. Expected output not attained.", i)
+		if !reflect.DeepEqual(tt.out, tt.in_cgs) {
+			t.Errorf("Error in index %d of bqMergeIntoClientGroups. Expected output not attained.", i)
+			for ipstr, cg := range tt.in_cgs {
+				t.Errorf("%v: %v", ipstr, cg)
+			}
 		}
 	}
 }

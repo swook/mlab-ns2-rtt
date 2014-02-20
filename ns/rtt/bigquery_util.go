@@ -17,8 +17,8 @@ package rtt
 import (
 	"code.google.com/p/google-api-go-client/bigquery/v2"
 	"code.google.com/p/mlab-ns2/gae/ns/data"
+	"github.com/swook/inssort"
 	"net"
-	"sort"
 	"strconv"
 	"time"
 )
@@ -108,11 +108,12 @@ func bqMergeIntoClientGroups(rows bqRows, sliverIPMap map[string]string, newCGs 
 	var oldSR, newSR SiteRTT
 	var oldSRIdx int
 	var changed, ok bool
+	var oldidxrange, idxrange []int
 
 	// Slice of CGs which need to be sorted later on. This is because new
 	// entries are inserted into an existing map and not all entries need
 	// to be sorted.
-	CGsToSort := make([]*ClientGroup, 0, len(rows))
+	CGsToSort := make(map[string][]int, 0)
 
 	for _, row := range rows {
 		// Get Site ID from serverIP
@@ -144,10 +145,13 @@ func bqMergeIntoClientGroups(rows bqRows, sliverIPMap map[string]string, newCGs 
 
 		// Create new entry
 		newSR = SiteRTT{siteID, row.rtt, row.lastUpdated}
+		idxrange = make([]int, 2, 2)
 		if !ok {
 			// No existing entry, add new entry
 			clientCG.SiteRTTs = append(clientCG.SiteRTTs, newSR)
 			changed = true
+			idxrange[1] = len(clientCG.SiteRTTs)
+			idxrange[0] = idxrange[1] - 1
 		} else {
 			// Entry exists, merge with old entry
 			// NOTE: Can ignore error as error only occurs when oldSR.SiteID
@@ -155,17 +159,28 @@ func bqMergeIntoClientGroups(rows bqRows, sliverIPMap map[string]string, newCGs 
 			changed, _ = MergeSiteRTTs(&oldSR, &newSR)
 			if changed {
 				clientCG.SiteRTTs[oldSRIdx] = oldSR
+				idxrange[0] = oldSRIdx
+				idxrange[1] = oldSRIdx + 1
 			}
 		}
 		if changed { // If existing SiteRTTs changed or updated
-			CGsToSort = append(CGsToSort, clientCG)
+			oldidxrange, ok = CGsToSort[clientCGIPStr]
+			if !ok {
+				CGsToSort[clientCGIPStr] = idxrange
+			} else {
+				// Expand index range to include new changes
+				if oldidxrange[0] > idxrange[0] {
+					oldidxrange[0] = idxrange[0]
+				}
+				if oldidxrange[1] < idxrange[1] {
+					oldidxrange[1] = idxrange[1]
+				}
+			}
 		}
 	}
 
 	// Sort ClientGroups' SiteRTTs in ascending RTT order
-	// TODO(seon.wook): Consider better sorting algo in cases such as almost
-	//                  sorted lists.
-	for _, cg := range CGsToSort {
-		sort.Sort(cg.SiteRTTs)
+	for clientCGIPStr, idxrange := range CGsToSort {
+		inssort.Sort(newCGs[clientCGIPStr].SiteRTTs, idxrange...)
 	}
 }
